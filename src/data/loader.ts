@@ -33,6 +33,7 @@ function formatFormSuffix(identifier: string, speciesIdentifier: string): string
 }
 
 export async function loadGameData(): Promise<GameData> {
+  const base = import.meta.env.BASE_URL;
   const [
     pokemonRows,
     speciesNameRows,
@@ -47,18 +48,18 @@ export async function loadGameData(): Promise<GameData> {
     formsRows,
     formNamesRows,
   ] = await Promise.all([
-    fetchCSV('/data/pokemon.csv'),
-    fetchCSV('/data/pokemon_species_names.csv'),
-    fetchCSV('/data/pokemon_stats.csv'),
-    fetchCSV('/data/pokemon_types.csv'),
-    fetchCSV('/data/moves.csv'),
-    fetchCSV('/data/move_names.csv'),
-    fetchCSV('/data/pokemon_moves.csv'),
-    fetchCSV('/data/type_efficacy.csv'),
-    fetchCSV('/data/types.csv'),
-    fetchJSON<Record<string, string>>('/data/move_descriptions.json'),
-    fetchCSV('/data/pokemon_forms.csv'),
-    fetchCSV('/data/pokemon_form_names.csv'),
+    fetchCSV(`${base}data/pokemon.csv`),
+    fetchCSV(`${base}data/pokemon_species_names.csv`),
+    fetchCSV(`${base}data/pokemon_stats.csv`),
+    fetchCSV(`${base}data/pokemon_types.csv`),
+    fetchCSV(`${base}data/moves.csv`),
+    fetchCSV(`${base}data/move_names.csv`),
+    fetchCSV(`${base}data/pokemon_moves.csv`),
+    fetchCSV(`${base}data/type_efficacy.csv`),
+    fetchCSV(`${base}data/types.csv`),
+    fetchJSON<Record<string, string>>(`${base}data/move_descriptions.json`),
+    fetchCSV(`${base}data/pokemon_forms.csv`),
+    fetchCSV(`${base}data/pokemon_form_names.csv`),
   ]);
 
   // English species names (language_id = 9)
