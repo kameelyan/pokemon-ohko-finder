@@ -142,93 +142,92 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                 onClick={() => toggle(pokemon.id)}
                 style={{
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
+                  flexDirection: 'column',
+                  gap: '6px',
                   padding: '8px 14px',
                   cursor: 'pointer',
                   userSelect: 'none',
                   background: allGuaranteed ? '#f0fff4' : '#fffbf0',
-                  flexWrap: 'wrap',
-                  rowGap: '4px',
+                  borderRadius: '10px 10px 0 0',
                 }}
               >
-                <span style={{
-                  fontSize: '11px', color: '#aaa',
-                  transform: isExpanded ? 'rotate(90deg)' : 'none',
-                  transition: 'transform 0.15s',
-                  display: 'inline-block', width: '12px', flexShrink: 0,
-                }}>▶</span>
-
-                <img
-                  src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.id}.png`}
-                  alt={pokemon.name}
-                  width={36} height={36}
-                  style={{ imageRendering: 'pixelated', marginTop: '-2px' }}
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-
-                {/* Name with stat tooltip */}
-                <Tooltip content={<StatTooltipContent pokemon={pokemon} />} maxWidth={220}>
+                {/* Row 1: identity + abilities */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', rowGap: '4px' }}>
                   <span style={{
-                    fontWeight: 700, fontSize: '15px', minWidth: '120px',
-                    borderBottom: '1px dashed #ccc', cursor: 'help',
-                  }}>
-                    {pokemon.name}
-                  </span>
-                </Tooltip>
+                    fontSize: '11px', color: '#aaa',
+                    transform: isExpanded ? 'rotate(90deg)' : 'none',
+                    transition: 'transform 0.15s',
+                    display: 'inline-block', width: '12px', flexShrink: 0,
+                  }}>▶</span>
 
-                <div style={{ display: 'flex', gap: '3px' }}>
-                  {typeNames.map(t => <TypeBadge key={t} typeName={t} />)}
-                </div>
+                  <img
+                    src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.id}.png`}
+                    alt={pokemon.name}
+                    width={36} height={36}
+                    style={{ imageRendering: 'pixelated', marginTop: '-2px' }}
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
 
-                <StatChip label="Atk" value={pokemon.stats.atk} />
-                <StatChip label="SpA" value={pokemon.stats.spa} />
-                <StatChip label="BST" value={
-                  pokemon.stats.hp + pokemon.stats.atk + pokemon.stats.def +
-                  pokemon.stats.spa + pokemon.stats.spd + pokemon.stats.spe
-                } />
+                  <Tooltip content={<StatTooltipContent pokemon={pokemon} />} maxWidth={220}>
+                    <span style={{
+                      fontWeight: 700, fontSize: '15px', minWidth: '120px',
+                      borderBottom: '1px dashed #ccc', cursor: 'help',
+                    }}>
+                      {pokemon.name}
+                    </span>
+                  </Tooltip>
 
-                {/* Speed chip with per-target comparison badges */}
-                <Tooltip
-                  content={
-                    <div>
-                      <div style={{ fontWeight: 700, marginBottom: '5px' }}>Speed (uninvested L50)</div>
-                      <div style={{ marginBottom: '4px' }}>This: {attackerSpe}</div>
-                      {targetSpeeds.map((ts, i) => {
-                        const faster = attackerSpe > ts;
-                        const tied = attackerSpe === ts;
-                        return (
-                          <div key={i} style={{ color: faster ? '#68d391' : tied ? '#f6e05e' : '#fc8181' }}>
-                            {targetNames[i]}: {ts} {faster ? '▲ faster' : tied ? '= tied' : '▼ slower'}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  }
-                  maxWidth={200}
-                >
-                  <span style={{
-                    background: '#f0f0f0', borderRadius: '5px', padding: '2px 7px',
-                    fontSize: '12px', fontWeight: 600, cursor: 'help',
-                    display: 'inline-flex', alignItems: 'center', gap: '4px',
-                  }}>
-                    Spe <span style={{ color: '#333' }}>{pokemon.stats.spe}</span>
-                    {targetSpeeds.length > 0 && (() => {
-                      const allFaster = targetSpeeds.every(ts => attackerSpe > ts);
-                      const allSlower = targetSpeeds.every(ts => attackerSpe < ts);
-                      const allTied   = targetSpeeds.every(ts => attackerSpe === ts);
-                      if (allFaster) return <span style={{ color: '#38a169', fontSize: '11px' }}>▲</span>;
-                      if (allSlower) return <span style={{ color: '#e53e3e', fontSize: '11px' }}>▼</span>;
-                      if (allTied)   return <span style={{ color: '#d69e2e', fontSize: '11px' }}>═</span>;
-                      return <span style={{ color: '#888', fontSize: '11px' }}>~</span>;
-                    })()}
-                  </span>
-                </Tooltip>
+                  <div style={{ display: 'flex', gap: '3px' }}>
+                    {typeNames.map(t => <TypeBadge key={t} typeName={t} />)}
+                  </div>
 
-                <div style={{ flex: 1, display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  {/* Ability chips — far right */}
+                  <StatChip label="Atk" value={pokemon.stats.atk} />
+                  <StatChip label="SpA" value={pokemon.stats.spa} />
+                  <StatChip label="BST" value={
+                    pokemon.stats.hp + pokemon.stats.atk + pokemon.stats.def +
+                    pokemon.stats.spa + pokemon.stats.spd + pokemon.stats.spe
+                  } />
+
+                  {/* Speed chip */}
+                  <Tooltip
+                    content={
+                      <div>
+                        <div style={{ fontWeight: 700, marginBottom: '5px' }}>Speed (uninvested L50)</div>
+                        <div style={{ marginBottom: '4px' }}>This: {attackerSpe}</div>
+                        {targetSpeeds.map((ts, i) => {
+                          const faster = attackerSpe > ts;
+                          const tied = attackerSpe === ts;
+                          return (
+                            <div key={i} style={{ color: faster ? '#68d391' : tied ? '#f6e05e' : '#fc8181' }}>
+                              {targetNames[i]}: {ts} {faster ? '▲ faster' : tied ? '= tied' : '▼ slower'}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    }
+                    maxWidth={200}
+                  >
+                    <span style={{
+                      background: '#f0f0f0', borderRadius: '5px', padding: '2px 7px',
+                      fontSize: '12px', fontWeight: 600, cursor: 'help',
+                      display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    }}>
+                      Spe <span style={{ color: '#333' }}>{pokemon.stats.spe}</span>
+                      {targetSpeeds.length > 0 && (() => {
+                        const allFaster = targetSpeeds.every(ts => attackerSpe > ts);
+                        const allSlower = targetSpeeds.every(ts => attackerSpe < ts);
+                        const allTied   = targetSpeeds.every(ts => attackerSpe === ts);
+                        if (allFaster) return <span style={{ color: '#38a169', fontSize: '11px' }}>▲</span>;
+                        if (allSlower) return <span style={{ color: '#e53e3e', fontSize: '11px' }}>▼</span>;
+                        if (allTied)   return <span style={{ color: '#d69e2e', fontSize: '11px' }}>═</span>;
+                        return <span style={{ color: '#888', fontSize: '11px' }}>~</span>;
+                      })()}
+                    </span>
+                  </Tooltip>
+
+                  {/* Ability chips — far right of row 1 */}
                   {pokemon.abilities.length > 0 && (
-                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {pokemon.abilities.map(ability => (
                         <Tooltip
                           key={ability.name}
@@ -265,7 +264,10 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                       ))}
                     </div>
                   )}
+                </div>
 
+                {/* Row 2: move counts + status badge, right-aligned */}
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   {moveCounts.map((mc, i) => (
                     <div key={i} style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '10px', color: '#aaa', textTransform: 'uppercase' }}>
