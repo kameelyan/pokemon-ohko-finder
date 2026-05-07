@@ -31,6 +31,7 @@ function makeSlot(): TargetSlot {
 export default function App() {
   const [data, setData] = useState<GameData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [slots, setSlots] = useState<TargetSlot[]>([makeSlot()]);
   // Gate: don't overwrite localStorage until after we've had a chance to restore
@@ -42,7 +43,9 @@ export default function App() {
   const [minAccuracy, setMinAccuracy] = useState(0);
 
   useEffect(() => {
-    loadGameData().then(d => { setData(d); setLoading(false); });
+    loadGameData()
+      .then(d => { setData(d); setLoading(false); })
+      .catch(err => { setLoadError(String(err)); setLoading(false); });
   }, []);
 
   // Restore saved slots once data is available, then open the save gate
@@ -143,6 +146,23 @@ export default function App() {
           <div style={{ textAlign: 'center', marginTop: '80px' }}>
             <div style={{ fontSize: '48px' }}>⏳</div>
             <p style={{ fontSize: '18px', color: '#666', marginTop: '16px' }}>Loading Pokédex data…</p>
+          </div>
+        ) : loadError ? (
+          <div style={{ textAlign: 'center', marginTop: '80px' }}>
+            <div style={{ fontSize: '48px' }}>⚠️</div>
+            <p style={{ fontSize: '18px', color: '#e53e3e', marginTop: '16px', fontWeight: 700 }}>
+              Failed to load Pokédex data
+            </p>
+            <p style={{ fontSize: '14px', color: '#888', maxWidth: '500px', margin: '8px auto 0' }}>
+              Try a hard refresh (<kbd>Cmd+Shift+R</kbd> on Mac, <kbd>Ctrl+Shift+R</kbd> on Windows).
+              If the problem persists, check the browser console for details.
+            </p>
+            <details style={{ marginTop: '12px', fontSize: '12px', color: '#aaa' }}>
+              <summary style={{ cursor: 'pointer' }}>Error details</summary>
+              <pre style={{ textAlign: 'left', background: '#f5f5f5', padding: '8px', borderRadius: '6px', marginTop: '6px', overflowX: 'auto' }}>
+                {loadError}
+              </pre>
+            </details>
           </div>
         ) : (
           <>

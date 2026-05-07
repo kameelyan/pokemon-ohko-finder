@@ -1,3 +1,4 @@
+// Data is served relative to the app base path (import.meta.env.BASE_URL).
 import type { GameData, Move, Pokemon } from './types';
 
 function parseCSV(text: string): Record<string, string>[] {
