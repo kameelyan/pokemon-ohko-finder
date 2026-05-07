@@ -1,3 +1,9 @@
+export interface PokemonAbility {
+  name: string;
+  description: string;
+  isHidden: boolean;
+}
+
 export interface Pokemon {
   id: number;
   identifier: string;
@@ -13,6 +19,7 @@ export interface Pokemon {
     spd: number;
     spe: number;
   };
+  abilities: PokemonAbility[];
 }
 
 export interface Move {
