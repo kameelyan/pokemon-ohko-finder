@@ -171,6 +171,16 @@ export default function App() {
               background: '#fff', borderRadius: '12px', padding: '24px',
               boxShadow: '0 2px 8px rgba(0,0,0,0.07)', marginBottom: '24px',
             }}>
+              {/* Section header */}
+              <div style={{ marginBottom: '16px' }}>
+                <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#333' }}>
+                  Target Pokémon
+                </h2>
+                <p style={{ margin: '3px 0 0', fontSize: '13px', color: '#999' }}>
+                  Select up to {MAX_TARGETS} Pokémon to find what can OHKO them
+                </p>
+              </div>
+
               {/* Target grid */}
               <div style={{
                 display: 'grid',
@@ -186,7 +196,6 @@ export default function App() {
                     selected={slot.pokemon}
                     evs={slot.evs}
                     onSelect={p => updateSlot(slot.id, { pokemon: p, evs: { ...DEFAULT_EVS } })}
-                    onClear={() => updateSlot(slot.id, { pokemon: null, evs: { ...DEFAULT_EVS } })}
                     onRemove={slots.length > 1 ? () => removeSlot(slot.id) : undefined}
                     onEvsChange={evs => updateSlot(slot.id, { evs })}
                     data={data!}
@@ -300,13 +309,12 @@ export default function App() {
   );
 }
 
-function TargetPanel({ label, pokemon, selected, evs, onSelect, onClear, onRemove, onEvsChange, data }: {
+function TargetPanel({ label, pokemon, selected, evs, onSelect, onRemove, onEvsChange, data }: {
   label: string;
   pokemon: Pokemon[];
   selected: Pokemon | null;
   evs: EVSpread;
   onSelect: (p: Pokemon) => void;
-  onClear: () => void;
   onRemove?: () => void;
   onEvsChange: (evs: EVSpread) => void;
   data: GameData;
@@ -343,12 +351,6 @@ function TargetPanel({ label, pokemon, selected, evs, onSelect, onClear, onRemov
 
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
         <PokemonSearch pokemon={pokemon} onSelect={onSelect} />
-        {selected && (
-          <button onClick={onClear} title="Clear Pokémon" style={{
-            background: 'none', border: '1px solid #ddd', borderRadius: '6px',
-            cursor: 'pointer', padding: '7px 9px', fontSize: '13px', color: '#aaa',
-          }}>✕</button>
-        )}
       </div>
 
       {selected && (
