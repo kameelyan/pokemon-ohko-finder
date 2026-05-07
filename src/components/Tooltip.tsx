@@ -4,6 +4,7 @@ interface Props {
   children: React.ReactNode;
   content: React.ReactNode;
   maxWidth?: number;
+  side?: 'top' | 'bottom'; // hint only — auto-flip takes precedence
 }
 
 export default function Tooltip({ children, content, maxWidth = 280 }: Props) {
