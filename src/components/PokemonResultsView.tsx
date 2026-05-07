@@ -181,46 +181,6 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                   {typeNames.map(t => <TypeBadge key={t} typeName={t} />)}
                 </div>
 
-                {/* Ability chips */}
-                {pokemon.abilities.length > 0 && (
-                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                    {pokemon.abilities.map(ability => (
-                      <Tooltip
-                        key={ability.name}
-                        content={
-                          <div>
-                            <div style={{ fontWeight: 700, marginBottom: '4px' }}>
-                              {ability.name}
-                              {ability.isHidden && (
-                                <span style={{ marginLeft: '6px', fontSize: '10px', color: '#a78bfa', fontWeight: 600 }}>Hidden</span>
-                              )}
-                            </div>
-                            {ability.description
-                              ? <div style={{ color: '#ccc' }}>{ability.description}</div>
-                              : <div style={{ color: '#777', fontStyle: 'italic' }}>No description available</div>
-                            }
-                          </div>
-                        }
-                        maxWidth={240}
-                      >
-                        <span style={{
-                          background: ability.isHidden ? '#f3f0ff' : '#f0f0f0',
-                          border: `1px solid ${ability.isHidden ? '#c4b5fd' : '#e0e0e0'}`,
-                          color: ability.isHidden ? '#6d28d9' : '#444',
-                          borderRadius: '5px',
-                          padding: '1px 7px',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          cursor: 'help',
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {ability.name}
-                        </span>
-                      </Tooltip>
-                    ))}
-                  </div>
-                )}
-
                 <StatChip label="Atk" value={pokemon.stats.atk} />
                 <StatChip label="SpA" value={pokemon.stats.spa} />
                 <StatChip label="BST" value={
@@ -266,6 +226,46 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                 </Tooltip>
 
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {/* Ability chips — far right */}
+                  {pokemon.abilities.length > 0 && (
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {pokemon.abilities.map(ability => (
+                        <Tooltip
+                          key={ability.name}
+                          content={
+                            <div>
+                              <div style={{ fontWeight: 700, marginBottom: '4px' }}>
+                                {ability.name}
+                                {ability.isHidden && (
+                                  <span style={{ marginLeft: '6px', fontSize: '10px', color: '#a78bfa', fontWeight: 600 }}>Hidden</span>
+                                )}
+                              </div>
+                              {ability.description
+                                ? <div style={{ color: '#ccc' }}>{ability.description}</div>
+                                : <div style={{ color: '#777', fontStyle: 'italic' }}>No description available</div>
+                              }
+                            </div>
+                          }
+                          maxWidth={240}
+                        >
+                          <span style={{
+                            background: ability.isHidden ? '#f3f0ff' : '#f0f0f0',
+                            border: `1px solid ${ability.isHidden ? '#c4b5fd' : '#e0e0e0'}`,
+                            color: ability.isHidden ? '#6d28d9' : '#444',
+                            borderRadius: '5px',
+                            padding: '1px 7px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            cursor: 'help',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {ability.name}
+                          </span>
+                        </Tooltip>
+                      ))}
+                    </div>
+                  )}
+
                   {moveCounts.map((mc, i) => (
                     <div key={i} style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '10px', color: '#aaa', textTransform: 'uppercase' }}>
