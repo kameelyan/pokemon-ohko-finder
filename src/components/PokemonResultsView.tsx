@@ -225,7 +225,7 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                   </span>
                 </Tooltip>
 
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {/* Ability chips — far right */}
                   {pokemon.abilities.length > 0 && (
                     <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
