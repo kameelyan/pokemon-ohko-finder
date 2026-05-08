@@ -11,6 +11,12 @@ export interface TargetConfig {
   evs: EVSpread;
 }
 
+export interface HeldItem {
+  name: string;
+  identifier: string; // used to build sprite URL
+  boost: number;      // damage multiplier, e.g. 1.2
+}
+
 export interface OHKOMoveInfo {
   move: Move;
   minDamage: number;
@@ -21,6 +27,8 @@ export interface OHKOMoveInfo {
   stab: boolean;
   accuracy: number | null; // null = always hits
   evNeeded: number; // minimum Atk/SpA EVs (0–252) to achieve this OHKO
+  /** Held item required for this OHKO (only set when needed; absent = no item). */
+  item?: HeldItem;
   /** Indices of every target (within the targets array) that this move can OHKO. */
   coveredTargetIndices: number[];
 }
@@ -32,6 +40,28 @@ export interface PokemonOHKOResult {
   /** True when every target has at least one guaranteed OHKO move. */
   allGuaranteed: boolean;
 }
+
+/** Type-boosting held items (+20%) keyed by type ID. */
+const TYPE_BOOST_ITEMS: Record<number, HeldItem> = {
+  1:  { name: 'Silk Scarf',     identifier: 'silk-scarf',     boost: 1.2 },
+  2:  { name: 'Black Belt',     identifier: 'black-belt',     boost: 1.2 },
+  3:  { name: 'Sharp Beak',     identifier: 'sharp-beak',     boost: 1.2 },
+  4:  { name: 'Poison Barb',    identifier: 'poison-barb',    boost: 1.2 },
+  5:  { name: 'Soft Sand',      identifier: 'soft-sand',      boost: 1.2 },
+  6:  { name: 'Hard Stone',     identifier: 'hard-stone',     boost: 1.2 },
+  7:  { name: 'Silver Powder',  identifier: 'silver-powder',  boost: 1.2 },
+  8:  { name: 'Spell Tag',      identifier: 'spell-tag',      boost: 1.2 },
+  9:  { name: 'Metal Coat',     identifier: 'metal-coat',     boost: 1.2 },
+  10: { name: 'Charcoal',       identifier: 'charcoal',       boost: 1.2 },
+  11: { name: 'Mystic Water',   identifier: 'mystic-water',   boost: 1.2 },
+  12: { name: 'Miracle Seed',   identifier: 'miracle-seed',   boost: 1.2 },
+  13: { name: 'Magnet',         identifier: 'magnet',         boost: 1.2 },
+  14: { name: 'Twisted Spoon',  identifier: 'twisted-spoon',  boost: 1.2 },
+  15: { name: 'Never-Melt Ice', identifier: 'never-melt-ice', boost: 1.2 },
+  16: { name: 'Dragon Fang',    identifier: 'dragon-fang',    boost: 1.2 },
+  17: { name: 'Black Glasses',  identifier: 'black-glasses',  boost: 1.2 },
+  18: { name: 'Fairy Feather',  identifier: 'fairy-feather',  boost: 1.2 },
+};
 
 /** Gen 4+ HP formula */
 export function calcHP(base: number, ev = 0, iv = 31, level = 50): number {
@@ -48,10 +78,13 @@ function damageSingle(
   atk: number,
   def: number,
   stab: boolean,
-  effFactor: number
+  effFactor: number,
+  itemMult = 1.0,
 ): { min: number; max: number } {
   const base = Math.floor(Math.floor(22 * power * atk / def) / 50) + 2;
-  const maxDmg = Math.floor(Math.floor(base * (stab ? 1.5 : 1.0)) * (effFactor / 100));
+  const afterStab = Math.floor(base * (stab ? 1.5 : 1.0));
+  const afterType = Math.floor(afterStab * (effFactor / 100));
+  const maxDmg = Math.floor(afterType * itemMult);
   const minDmg = Math.floor(maxDmg * 0.85);
   return { min: minDmg, max: maxDmg };
 }
@@ -77,11 +110,12 @@ function minEVsToOHKO(
   targetHP: number,
   stab: boolean,
   effFactor: number,
-  guaranteed: boolean
+  guaranteed: boolean,
+  itemMult = 1.0,
 ): number | null {
   for (let ev = 0; ev <= 252; ev += 4) {
     const atk = calcStat(atkBase, ev, 31, 50, 1.0);
-    const { min, max } = damageSingle(power, atk, def, stab, effFactor);
+    const { min, max } = damageSingle(power, atk, def, stab, effFactor, itemMult);
     if (guaranteed ? min >= targetHP : max >= targetHP) return ev;
   }
   return null;
@@ -90,6 +124,8 @@ function minEVsToOHKO(
 /**
  * For each Pokémon, find every move that OHKOs each target.
  * Only returns Pokémon that have at least one qualifying move for EVERY target.
+ * When a move cannot OHKO unaided, the calc retries with a type-boosting item (+20%);
+ * the item is included in OHKOMoveInfo only when required.
  */
 export function findPokemonOHKOs(
   targets: TargetConfig[],
@@ -129,19 +165,29 @@ export function findPokemonOHKOs(
       const atkBase = isPhysical ? attacker.stats.atk : attacker.stats.spa;
       const stab = attacker.typeIds.includes(move.typeId);
 
-      // Check this move against each target independently
       for (let ti = 0; ti < targetStats.length; ti++) {
         const ts = targetStats[ti];
         const defStat = isPhysical ? ts.def : ts.spd;
         const effFactor = getEffectiveness(move.typeId, ts.pokemon.typeIds, data.typeEfficacy);
         if (effFactor === 0) continue;
 
-        // Find minimum EVs needed rather than always assuming 252
-        const evNeeded = minEVsToOHKO(move.power, atkBase, defStat, ts.hp, stab, effFactor, !showPossible);
+        // 1. Try without any item
+        let evNeeded = minEVsToOHKO(move.power, atkBase, defStat, ts.hp, stab, effFactor, !showPossible);
+        let heldItem: HeldItem | undefined;
+
+        // 2. If impossible without item, try with the type-boosting item (+20%)
+        if (evNeeded === null) {
+          const typeItem = TYPE_BOOST_ITEMS[move.typeId];
+          if (typeItem) {
+            evNeeded = minEVsToOHKO(move.power, atkBase, defStat, ts.hp, stab, effFactor, !showPossible, typeItem.boost);
+            if (evNeeded !== null) heldItem = typeItem;
+          }
+        }
+
         if (evNeeded === null) continue;
 
         const atkStat = calcStat(atkBase, evNeeded, 31, 50, 1.0);
-        const { min, max } = damageSingle(move.power, atkStat, defStat, stab, effFactor);
+        const { min, max } = damageSingle(move.power, atkStat, defStat, stab, effFactor, heldItem?.boost ?? 1.0);
         const isGuaranteed = min >= ts.hp;
 
         movesPerTarget[ti].push({
@@ -154,6 +200,7 @@ export function findPokemonOHKOs(
           stab,
           accuracy: move.accuracy,
           evNeeded,
+          item: heldItem,
           coveredTargetIndices: [], // filled in below
         });
       }
@@ -171,14 +218,13 @@ export function findPokemonOHKOs(
         moveTargetMap.get(info.move.id)!.push(ti);
       }
     }
-    // Stamp each entry with the full coverage list
     for (const moves of movesPerTarget) {
       for (const info of moves) {
         info.coveredTargetIndices = moveTargetMap.get(info.move.id)!;
       }
     }
 
-    // Sort each target's move list: guaranteed first, then by max damage
+    // Sort each target's move list: guaranteed first, then by max damage desc
     for (const moves of movesPerTarget) {
       moves.sort((a, b) => {
         if (a.isGuaranteed !== b.isGuaranteed) return a.isGuaranteed ? -1 : 1;

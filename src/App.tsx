@@ -5,7 +5,9 @@ import { findPokemonOHKOs, calcHP, calcStat } from './calc/damage';
 import type { PokemonOHKOResult, EVSpread, TargetConfig } from './calc/damage';
 import PokemonSearch from './components/PokemonSearch';
 import PokemonResultsView from './components/PokemonResultsView';
+import ReleaseNotes from './components/ReleaseNotes';
 import TypeBadge from './components/TypeBadge';
+import { APP_VERSION } from './version';
 
 const DEFAULT_EVS: EVSpread = { hp: 0, def: 0, spd: 0 };
 const MAX_TARGETS = 6;
@@ -15,17 +17,19 @@ interface TargetSlot {
   id: number;           // stable key for React
   pokemon: Pokemon | null;
   evs: EVSpread;
+  mustOutspeed: boolean;
 }
 
 /** Shape written to / read from localStorage (no full Pokemon object). */
 interface SavedSlot {
   pokemonId: number | null;
   evs: EVSpread;
+  mustOutspeed?: boolean;
 }
 
 let nextId = 1;
 function makeSlot(): TargetSlot {
-  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS } };
+  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false };
 }
 
 export default function App() {
@@ -37,6 +41,8 @@ export default function App() {
   // Gate: don't overwrite localStorage until after we've had a chance to restore
   const restoredRef = useRef(false);
 
+  const [activeTab, setActiveTab] = useState<'finder' | 'notes'>('finder');
+  const [championsOnly, setChampionsOnly] = useState(true);
   const [results, setResults] = useState<PokemonOHKOResult[]>([]);
   const [computing, setComputing] = useState(false);
   const [showPossible, setShowPossible] = useState(false);
@@ -60,6 +66,7 @@ export default function App() {
             id: nextId++,
             pokemon: s.pokemonId != null ? (data.pokemon.get(s.pokemonId) ?? null) : null,
             evs: s.evs ?? { ...DEFAULT_EVS },
+            mustOutspeed: s.mustOutspeed ?? false,
           }));
           restoredRef.current = true; // open gate before setSlots so the next save is correct
           setSlots(restored);
@@ -76,6 +83,7 @@ export default function App() {
     const toSave: SavedSlot[] = slots.map(s => ({
       pokemonId: s.pokemon?.id ?? null,
       evs: s.evs,
+      mustOutspeed: s.mustOutspeed,
     }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   }, [slots]);
@@ -90,6 +98,12 @@ export default function App() {
     });
   }, [data]);
 
+  // When Champions mode is on, restrict the search list to roster Pokémon only
+  const searchablePokemon = useMemo(() => {
+    if (!data || !championsOnly) return pokemonList;
+    return pokemonList.filter(p => data.championsRoster.has(p.speciesId));
+  }, [pokemonList, championsOnly, data]);
+
   // Slots with a selected Pokémon
   const activeTargets: TargetConfig[] = slots
     .filter(s => s.pokemon !== null)
@@ -97,6 +111,11 @@ export default function App() {
 
   // Uninvested L50 speed for each active target (0 EVs, 31 IVs, neutral nature)
   const targetSpeeds: number[] = activeTargets.map(t => calcStat(t.pokemon.stats.spe, 0));
+
+  // Speeds of targets with mustOutspeed checked (passed to results view for filtering)
+  const mustOutspeedSpeeds: number[] = slots
+    .filter(s => s.pokemon !== null && s.mustOutspeed)
+    .map(s => calcStat(s.pokemon!.stats.spe, 0));
 
   useEffect(() => {
     if (!data || activeTargets.length === 0) { setResults([]); return; }
@@ -132,17 +151,50 @@ export default function App() {
     <div style={{ minHeight: '100vh', background: '#f8f9fa', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{
         background: 'linear-gradient(135deg, #e53e3e 0%, #c53030 100%)',
-        color: '#fff', padding: '24px 32px',
+        color: '#fff', padding: '24px 32px 0',
         boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
       }}>
-        <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 800 }}>⚔ Pokémon OHKO Finder</h1>
-        <p style={{ margin: '4px 0 0', opacity: 0.85, fontSize: '15px' }}>
-          Find every Pokémon that can one-hit KO your targets in competitive play (Level 50)
-        </p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 800 }}>⚔ Pokémon OHKO Finder</h1>
+            <p style={{ margin: '4px 0 0', opacity: 0.85, fontSize: '15px' }}>
+              Find every Pokémon that can one-hit KO your targets in competitive play (Level 50)
+            </p>
+          </div>
+          <span style={{ opacity: 0.6, fontSize: '12px', fontWeight: 600, paddingTop: '4px' }}>
+            v{APP_VERSION}
+          </span>
+        </div>
+
+        {/* Tab bar */}
+        <div style={{ display: 'flex', gap: '4px', marginTop: '20px' }}>
+          {([
+            ['finder', '⚔ OHKO Finder'],
+            ['notes',  '📋 Release Notes'],
+          ] as ['finder' | 'notes', string][]).map(([tab, label]) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                background: activeTab === tab ? '#fff' : 'transparent',
+                color: activeTab === tab ? '#c53030' : 'rgba(255,255,255,0.75)',
+                border: 'none',
+                borderRadius: '8px 8px 0 0',
+                padding: '8px 18px',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+            >{label}</button>
+          ))}
+        </div>
       </header>
 
       <main style={{ maxWidth: '1300px', margin: '0 auto', padding: '32px 24px' }}>
-        {loading ? (
+        {activeTab === 'notes' ? (
+          <ReleaseNotes />
+        ) : loading ? (
           <div style={{ textAlign: 'center', marginTop: '80px' }}>
             <div style={{ fontSize: '48px' }}>⏳</div>
             <p style={{ fontSize: '18px', color: '#666', marginTop: '16px' }}>Loading Pokédex data…</p>
@@ -171,14 +223,45 @@ export default function App() {
               background: '#fff', borderRadius: '12px', padding: '24px',
               boxShadow: '0 2px 8px rgba(0,0,0,0.07)', marginBottom: '24px',
             }}>
-              {/* Section header */}
-              <div style={{ marginBottom: '16px' }}>
-                <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#333' }}>
-                  Target Pokémon
-                </h2>
-                <p style={{ margin: '3px 0 0', fontSize: '13px', color: '#999' }}>
-                  Select up to {MAX_TARGETS} Pokémon to find what can OHKO them
-                </p>
+              {/* Champions toggle + section header */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#333' }}>
+                    Target Pokémon
+                  </h2>
+                  <p style={{ margin: '3px 0 0', fontSize: '13px', color: '#999' }}>
+                    Select up to {MAX_TARGETS} Pokémon to find what can OHKO them
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setChampionsOnly(v => !v)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '7px',
+                    padding: '6px 14px',
+                    border: `1.5px solid ${championsOnly ? '#553c9a' : '#ddd'}`,
+                    borderRadius: '8px',
+                    background: championsOnly ? '#f3f0ff' : '#fff',
+                    color: championsOnly ? '#553c9a' : '#888',
+                    fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <span>🏆</span>
+                  <span>Pokémon Champions</span>
+                  <span style={{
+                    width: '28px', height: '16px', borderRadius: '999px',
+                    background: championsOnly ? '#553c9a' : '#ddd',
+                    position: 'relative', flexShrink: 0, transition: 'background 0.15s',
+                  }}>
+                    <span style={{
+                      position: 'absolute', top: '2px',
+                      left: championsOnly ? '14px' : '2px',
+                      width: '12px', height: '12px', borderRadius: '50%',
+                      background: '#fff', transition: 'left 0.15s',
+                    }} />
+                  </span>
+                </button>
               </div>
 
               {/* Target grid */}
@@ -192,12 +275,14 @@ export default function App() {
                   <TargetPanel
                     key={slot.id}
                     label={`Target ${idx + 1}`}
-                    pokemon={pokemonList}
+                    pokemon={searchablePokemon}
                     selected={slot.pokemon}
                     evs={slot.evs}
+                    mustOutspeed={slot.mustOutspeed}
                     onSelect={p => updateSlot(slot.id, { pokemon: p, evs: { ...DEFAULT_EVS } })}
                     onRemove={slots.length > 1 ? () => removeSlot(slot.id) : undefined}
                     onEvsChange={evs => updateSlot(slot.id, { evs })}
+                    onMustOutspeedChange={v => updateSlot(slot.id, { mustOutspeed: v })}
                     data={data!}
                   />
                 ))}
@@ -237,40 +322,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* Options row */}
-              <div style={{
-                borderTop: '1px solid #f0f0f0',
-                paddingTop: '16px',
-                display: 'flex',
-                gap: '32px',
-                flexWrap: 'wrap',
-                alignItems: 'flex-start',
-              }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                  <input type="checkbox" checked={showPossible} onChange={e => setShowPossible(e.target.checked)} />
-                  Show possible OHKOs (not just guaranteed)
-                </label>
-
-                <div>
-                  <div style={{ fontSize: '14px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span>Min. accuracy</span>
-                    <span style={{
-                      fontWeight: 700, fontSize: '15px', minWidth: '44px',
-                      color: minAccuracy === 0 ? '#aaa' : minAccuracy >= 90 ? '#38a169' : '#d69e2e',
-                    }}>
-                      {minAccuracy === 0 ? 'Any' : `${minAccuracy}%`}
-                    </span>
-                  </div>
-                  <input
-                    type="range" min={0} max={100} step={5} value={minAccuracy}
-                    onChange={e => setMinAccuracy(Number(e.target.value))}
-                    style={{ width: '180px', accentColor: '#e53e3e', cursor: 'pointer' }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#bbb', width: '180px' }}>
-                    <span>Any</span><span>50%</span><span>100%</span>
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Results */}
@@ -287,8 +338,13 @@ export default function App() {
                     results={results}
                     targetNames={filledNames}
                     targetSpeeds={targetSpeeds}
+                    mustOutspeedSpeeds={mustOutspeedSpeeds}
+                    championsOnly={championsOnly}
                     data={data!}
                     showPossible={showPossible}
+                    onShowPossibleChange={setShowPossible}
+                    minAccuracy={minAccuracy}
+                    onMinAccuracyChange={setMinAccuracy}
                   />
                 )}
               </div>
@@ -309,14 +365,16 @@ export default function App() {
   );
 }
 
-function TargetPanel({ label, pokemon, selected, evs, onSelect, onRemove, onEvsChange, data }: {
+function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, onSelect, onRemove, onEvsChange, onMustOutspeedChange, data }: {
   label: string;
   pokemon: Pokemon[];
   selected: Pokemon | null;
   evs: EVSpread;
+  mustOutspeed: boolean;
   onSelect: (p: Pokemon) => void;
   onRemove?: () => void;
   onEvsChange: (evs: EVSpread) => void;
+  onMustOutspeedChange: (v: boolean) => void;
   data: GameData;
 }) {
   const hp  = selected ? calcHP(selected.stats.hp, evs.hp) : 0;
@@ -383,6 +441,20 @@ function TargetPanel({ label, pokemon, selected, evs, onSelect, onRemove, onEvsC
             <EVInput label="Def EVs" value={evs.def} onChange={v => onEvsChange({ ...evs, def: v })} />
             <EVInput label="SpD EVs" value={evs.spd} onChange={v => onEvsChange({ ...evs, spd: v })} />
           </div>
+
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            marginTop: '10px', cursor: 'pointer', fontSize: '12px',
+            color: mustOutspeed ? '#2b6cb0' : '#666',
+            fontWeight: mustOutspeed ? 700 : 400,
+          }}>
+            <input
+              type="checkbox"
+              checked={mustOutspeed}
+              onChange={e => onMustOutspeedChange(e.target.checked)}
+            />
+            Must outspeed {selected.name}
+          </label>
         </div>
       )}
     </div>

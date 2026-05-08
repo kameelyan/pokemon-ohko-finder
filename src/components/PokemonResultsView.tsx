@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { PokemonOHKOResult, OHKOMoveInfo } from '../calc/damage';
 import { calcStat } from '../calc/damage';
 import type { GameData, Pokemon } from '../data/types';
@@ -31,12 +31,44 @@ function CategoryIcon({ damageClassId }: { damageClassId: number }) {
   );
 }
 
+function ItemIcon({ identifier, name, boost }: { identifier: string; name: string; boost: number }) {
+  const [failed, setFailed] = useState(false);
+  const src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${identifier}.png`;
+  const pct = Math.round((boost - 1) * 100);
+  if (failed) {
+    return (
+      <Tooltip content={`${name} (+${pct}%)`} side="bottom">
+        <span style={{ fontSize: '10px', color: '#b45309', fontWeight: 700, cursor: 'help' }}>
+          [{name}]
+        </span>
+      </Tooltip>
+    );
+  }
+  return (
+    <Tooltip content={`${name} (+${pct}%)`} side="bottom">
+      <img
+        src={src}
+        alt={name}
+        width={16}
+        height={16}
+        style={{ verticalAlign: 'middle', imageRendering: 'pixelated', cursor: 'help' }}
+        onError={() => setFailed(true)}
+      />
+    </Tooltip>
+  );
+}
+
 interface Props {
   results: PokemonOHKOResult[];
   targetNames: string[];
   targetSpeeds: number[];
+  mustOutspeedSpeeds: number[];
+  championsOnly: boolean;
   data: GameData;
   showPossible: boolean;
+  onShowPossibleChange: (v: boolean) => void;
+  minAccuracy: number;
+  onMinAccuracyChange: (v: number) => void;
 }
 
 /** Full base-stat grid shown in the Pokémon header tooltip */
@@ -73,8 +105,57 @@ function statColor(val: number): string {
   return '#fc8181';
 }
 
-export default function PokemonResultsView({ results, targetNames, targetSpeeds, data, showPossible }: Props) {
+// ── Filter types ────────────────────────────────────────────────────────────
+
+type OutspeedFilter = 'any' | 'all' | 'none';
+type CategoryFilter = 'all' | 'physical' | 'special';
+
+interface Filters {
+  types: Set<number>;
+  minSpe: string;
+  maxSpe: string;
+  outspeed: OutspeedFilter;
+  trickRoom: boolean;
+  category: CategoryFilter;
+  noEvs: boolean;
+  noItem: boolean;
+  defaultOnly: boolean;
+}
+
+const EMPTY_FILTERS: Filters = {
+  types: new Set(),
+  minSpe: '',
+  maxSpe: '',
+  outspeed: 'any',
+  trickRoom: false,
+  category: 'all',
+  noEvs: false,
+  noItem: false,
+  defaultOnly: false,
+};
+
+function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boolean): number {
+  return (
+    f.types.size +
+    (f.minSpe !== '' ? 1 : 0) +
+    (f.maxSpe !== '' ? 1 : 0) +
+    (f.outspeed !== 'any' ? 1 : 0) +
+    (f.trickRoom ? 1 : 0) +
+    (f.category !== 'all' ? 1 : 0) +
+    (f.noEvs ? 1 : 0) +
+    (f.noItem ? 1 : 0) +
+    (f.defaultOnly ? 1 : 0) +
+    (showPossible ? 1 : 0) +
+    (minAccuracy > 0 ? 1 : 0)
+  );
+}
+
+// ── Main component ───────────────────────────────────────────────────────────
+
+export default function PokemonResultsView({ results, targetNames, targetSpeeds, mustOutspeedSpeeds, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
 
   const toggle = (id: number) =>
     setExpandedIds(prev => {
@@ -83,8 +164,63 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
       return next;
     });
 
-  const expandAll = () => setExpandedIds(new Set(results.map(r => r.pokemon.id)));
+  // Unique type IDs across all result Pokémon
+  const availableTypes = useMemo(() => {
+    const s = new Set<number>();
+    for (const r of results) for (const t of r.pokemon.typeIds) s.add(t);
+    return Array.from(s).sort((a, b) => a - b);
+  }, [results]);
+
+  // Apply filters
+  const filteredResults = useMemo(() => {
+    return results.filter(r => {
+      const spe = calcStat(r.pokemon.stats.spe, 0);
+
+      if (filters.types.size > 0 && !r.pokemon.typeIds.some(t => filters.types.has(t))) return false;
+
+      if (filters.minSpe !== '' && spe < Number(filters.minSpe)) return false;
+      if (filters.maxSpe !== '' && spe > Number(filters.maxSpe)) return false;
+
+      // In Trick Room slower = first, so the comparison flips
+      const movesFirst = (a: number, t: number) => filters.trickRoom ? a < t : a > t;
+
+      if (targetSpeeds.length > 0 && filters.outspeed !== 'any') {
+        if (filters.outspeed === 'all'  && !targetSpeeds.every(ts => movesFirst(spe, ts))) return false;
+        if (filters.outspeed === 'none' && targetSpeeds.some(ts => movesFirst(spe, ts)))   return false;
+      }
+
+      // Per-target must-outspeed constraints (set on the target panel, TR-aware)
+      if (mustOutspeedSpeeds.length > 0 && !mustOutspeedSpeeds.every(ts => movesFirst(spe, ts))) return false;
+
+      if (filters.category !== 'all') {
+        const physical = filters.category === 'physical';
+        const classId = physical ? 2 : 3;
+        if (!r.movesPerTarget.every(moves => moves.some(m => m.move.damageClassId === classId))) return false;
+      }
+
+      if (filters.noEvs && !r.movesPerTarget.every(moves => moves.some(m => m.evNeeded === 0))) return false;
+      if (filters.noItem && !r.movesPerTarget.every(moves => moves.some(m => !m.item))) return false;
+      if (filters.defaultOnly && !r.pokemon.isDefault) return false;
+      if (championsOnly && !data.championsRoster.has(r.pokemon.speciesId)) return false;
+
+      return true;
+    });
+  }, [results, filters, targetSpeeds, mustOutspeedSpeeds, championsOnly]);
+
+  const expandAll = () => setExpandedIds(new Set(filteredResults.map(r => r.pokemon.id)));
   const collapseAll = () => setExpandedIds(new Set());
+
+  const activeFilterCount = countActiveFilters(filters, minAccuracy, showPossible);
+
+  const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) =>
+    setFilters(prev => ({ ...prev, [key]: value }));
+
+  const toggleType = (tid: number) =>
+    setFilters(prev => {
+      const next = new Set(prev.types);
+      next.has(tid) ? next.delete(tid) : next.add(tid);
+      return { ...prev, types: next };
+    });
 
   if (results.length === 0) {
     return (
@@ -99,34 +235,254 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
     );
   }
 
-  const guaranteed = results.filter(r => r.allGuaranteed);
-  const possible = results.filter(r => !r.allGuaranteed);
+  const guaranteed = filteredResults.filter(r => r.allGuaranteed);
+  const possible = filteredResults.filter(r => !r.allGuaranteed);
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+      {/* ── Top bar ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
         <p style={{ color: '#666', fontSize: '14px', margin: 0 }}>
           <strong>{guaranteed.length}</strong> Pokémon with guaranteed OHKOs
-          {showPossible && possible.length > 0 && <>, <strong>{possible.length}</strong> more with possible OHKOs</>}.
+          {showPossible && possible.length > 0 && <>, <strong>{possible.length}</strong> more with possible OHKOs</>}
+          {activeFilterCount > 0 && (
+            <span style={{ color: '#999' }}> &nbsp;(showing {filteredResults.length} of {results.length})</span>
+          )}
+          .
         </p>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setFiltersOpen(v => !v)}
+            style={{
+              ...btnStyle,
+              background: filtersOpen ? '#fff7ed' : '#fff',
+              borderColor: filtersOpen ? '#f59e0b' : '#ddd',
+              color: filtersOpen ? '#b45309' : '#555',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+          >
+            Filters
+            {activeFilterCount > 0 && (
+              <span style={{
+                background: '#e53e3e', color: '#fff',
+                borderRadius: '999px', fontSize: '10px', fontWeight: 700,
+                padding: '1px 6px', lineHeight: 1.4,
+              }}>{activeFilterCount}</span>
+            )}
+            <span style={{ fontSize: '10px' }}>{filtersOpen ? '▲' : '▼'}</span>
+          </button>
           <button onClick={expandAll} style={btnStyle}>Expand all</button>
           <button onClick={collapseAll} style={btnStyle} disabled={expandedIds.size === 0}>Collapse all</button>
         </div>
       </div>
 
+      {/* ── Filter panel ── */}
+      {filtersOpen && (
+        <div style={{
+          border: '1px solid #fde68a',
+          borderRadius: '10px',
+          padding: '16px',
+          marginBottom: '16px',
+          background: '#fffbf0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
+        }}>
+          {/* Row 1: Type */}
+          <div>
+            <div style={filterLabel}>Pokémon Type</div>
+            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '6px' }}>
+              {availableTypes.map(tid => {
+                const active = filters.types.has(tid);
+                return (
+                  <span
+                    key={tid}
+                    onClick={() => toggleType(tid)}
+                    style={{ cursor: 'pointer', opacity: filters.types.size > 0 && !active ? 0.35 : 1, transition: 'opacity 0.1s' }}
+                  >
+                    <TypeBadge typeName={data.typeNames.get(tid) ?? '?'} />
+                  </span>
+                );
+              })}
+              {filters.types.size > 0 && (
+                <button onClick={() => setFilter('types', new Set())} style={clearChipStyle}>✕ Clear</button>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: Speed + Outspeed */}
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={filterLabel}>Speed (uninvested L50)</div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '6px' }}>
+                <span style={{ fontSize: '13px', color: '#666' }}>Min</span>
+                <input
+                  type="number" min={0} max={999} value={filters.minSpe}
+                  onChange={e => setFilter('minSpe', e.target.value)}
+                  placeholder="—"
+                  style={numInputStyle}
+                />
+                <span style={{ fontSize: '13px', color: '#666' }}>Max</span>
+                <input
+                  type="number" min={0} max={999} value={filters.maxSpe}
+                  onChange={e => setFilter('maxSpe', e.target.value)}
+                  placeholder="—"
+                  style={numInputStyle}
+                />
+              </div>
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={filterLabel}>Outspeed Targets</div>
+                {/* Trick Room toggle — lives right next to the outspeed label */}
+                <button
+                  onClick={() => setFilter('trickRoom', !filters.trickRoom)}
+                  disabled={targetSpeeds.length === 0}
+                  title="Trick Room: reverses speed order — slower Pokémon move first"
+                  style={{
+                    ...toggleBtnStyle,
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    background: filters.trickRoom ? '#553c9a' : '#fff',
+                    color: filters.trickRoom ? '#fff' : '#7c3aed',
+                    borderColor: filters.trickRoom ? '#553c9a' : '#c4b5fd',
+                    fontWeight: 700,
+                  }}
+                >
+                  🔮 Trick Room
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                {([
+                  ['any', 'Any'],
+                  ['all', filters.trickRoom ? 'Slower than all' : 'Faster than all'],
+                  ['none', filters.trickRoom ? 'Faster than all' : 'Slower than all'],
+                ] as [OutspeedFilter, string][]).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => setFilter('outspeed', val)}
+                    disabled={targetSpeeds.length === 0}
+                    style={{
+                      ...toggleBtnStyle,
+                      background: filters.outspeed === val ? '#e53e3e' : '#fff',
+                      color: filters.outspeed === val ? '#fff' : '#555',
+                      borderColor: filters.outspeed === val ? '#e53e3e' : '#ddd',
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+              {targetSpeeds.length === 0 && (
+                <div style={{ fontSize: '11px', color: '#aaa', marginTop: '3px' }}>Select targets to enable</div>
+              )}
+            </div>
+
+            <div>
+              <div style={filterLabel}>Min. Accuracy</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
+                <input
+                  type="range" min={0} max={100} step={5} value={minAccuracy}
+                  onChange={e => onMinAccuracyChange(Number(e.target.value))}
+                  style={{ width: '140px', accentColor: '#e53e3e', cursor: 'pointer' }}
+                />
+                <span style={{
+                  fontWeight: 700, fontSize: '14px', minWidth: '44px',
+                  color: minAccuracy === 0 ? '#aaa' : minAccuracy >= 90 ? '#38a169' : '#d69e2e',
+                }}>
+                  {minAccuracy === 0 ? 'Any' : `${minAccuracy}%`}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#bbb', width: '140px', marginTop: '2px' }}>
+                <span>Any</span><span>50%</span><span>100%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3: Category + Form */}
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={filterLabel}>Move Category</div>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                {([
+                  ['all', 'All'],
+                  ['physical', 'Physical'],
+                  ['special', 'Special'],
+                ] as [CategoryFilter, string][]).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => setFilter('category', val)}
+                    style={{
+                      ...toggleBtnStyle,
+                      background: filters.category === val ? '#e53e3e' : '#fff',
+                      color: filters.category === val ? '#fff' : '#555',
+                      borderColor: filters.category === val ? '#e53e3e' : '#ddd',
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div style={filterLabel}>Other</div>
+              <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '6px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                  <input
+                    type="checkbox"
+                    checked={showPossible}
+                    onChange={e => onShowPossibleChange(e.target.checked)}
+                  />
+                  Show possible OHKOs (not just guaranteed)
+                </label>
+                {([
+                  ['noEvs', 'No EV investment required'],
+                  ['noItem', 'No held item required'],
+                  ['defaultOnly', 'Default forms only'],
+                ] as [keyof Filters, string][]).map(([key, label]) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!filters[key]}
+                      onChange={e => setFilter(key, e.target.checked as Filters[typeof key])}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Clear all */}
+          {activeFilterCount > 0 && (
+            <div>
+              <button
+                onClick={() => { setFilters(EMPTY_FILTERS); onMinAccuracyChange(0); onShowPossibleChange(false); }}
+                style={{ ...btnStyle, color: '#e53e3e', borderColor: '#e53e3e' }}
+              >
+                Clear all filters
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Results list ── */}
+      {filteredResults.length === 0 && activeFilterCount > 0 && (
+        <div style={{ textAlign: 'center', color: '#aaa', padding: '32px', fontSize: '15px' }}>
+          No results match the current filters.
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {results.map(result => {
+        {filteredResults.map(result => {
           const { pokemon, movesPerTarget, allGuaranteed } = result;
           const isExpanded = expandedIds.has(pokemon.id);
           const typeNames = pokemon.typeIds.map(tid => data.typeNames.get(tid) ?? '?');
+          const attackerSpe = calcStat(pokemon.stats.spe, 0);
 
           const moveCounts = movesPerTarget.map(moves => ({
             guaranteed: moves.filter(m => m.isGuaranteed).length,
             total: moves.length,
           }));
-
-          const attackerSpe = calcStat(pokemon.stats.spe, 0);
 
           return (
             <div
@@ -192,40 +548,70 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                   <Tooltip
                     content={
                       <div>
-                        <div style={{ fontWeight: 700, marginBottom: '5px' }}>Speed (uninvested L50)</div>
-                        <div style={{ marginBottom: '4px' }}>This: {attackerSpe}</div>
+                        <div style={{ fontWeight: 700, marginBottom: '7px' }}>
+                          Speed (uninvested L50){filters.trickRoom && <span style={{ marginLeft: '6px', color: '#b794f4', fontSize: '10px' }}>🔮 Trick Room</span>}
+                        </div>
                         {targetSpeeds.map((ts, i) => {
-                          const faster = attackerSpe > ts;
+                          const attackerGoesFirst = filters.trickRoom ? attackerSpe < ts : attackerSpe > ts;
                           const tied = attackerSpe === ts;
                           return (
-                            <div key={i} style={{ color: faster ? '#68d391' : tied ? '#f6e05e' : '#fc8181' }}>
-                              {targetNames[i]}: {ts} {faster ? '▲ faster' : tied ? '= tied' : '▼ slower'}
+                            <div key={i} style={{ marginBottom: '5px' }}>
+                              <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '2px' }}>
+                                vs {targetNames[i]}
+                              </div>
+                              <div style={{ display: 'flex', gap: '10px', fontSize: '12px' }}>
+                                <span>
+                                  {pokemon.name}: <strong>{attackerSpe}</strong>
+                                </span>
+                                <span style={{ color: '#666' }}>·</span>
+                                <span>
+                                  {targetNames[i]}: <strong>{ts}</strong>
+                                </span>
+                              </div>
+                              <div style={{
+                                marginTop: '3px', fontWeight: 700, fontSize: '12px',
+                                color: attackerGoesFirst ? '#68d391' : tied ? '#f6e05e' : '#fc8181',
+                              }}>
+                                {tied
+                                  ? 'Speed tie'
+                                  : attackerGoesFirst
+                                    ? `${pokemon.name} goes first`
+                                    : `${targetNames[i]} goes first`}
+                              </div>
                             </div>
                           );
                         })}
                       </div>
                     }
-                    maxWidth={200}
+                    maxWidth={220}
                   >
                     <span style={{
-                      background: '#f0f0f0', borderRadius: '5px', padding: '2px 7px',
+                      background: filters.trickRoom ? '#f3f0ff' : '#f0f0f0',
+                      border: filters.trickRoom ? '1px solid #c4b5fd' : '1px solid transparent',
+                      borderRadius: '5px', padding: '2px 7px',
                       fontSize: '12px', fontWeight: 600, cursor: 'help',
                       display: 'inline-flex', alignItems: 'center', gap: '4px',
                     }}>
+                      {filters.trickRoom && <span style={{ fontSize: '10px' }}>🔮</span>}
                       Spe <span style={{ color: '#333' }}>{pokemon.stats.spe}</span>
                       {targetSpeeds.length > 0 && (() => {
-                        const allFaster = targetSpeeds.every(ts => attackerSpe > ts);
-                        const allSlower = targetSpeeds.every(ts => attackerSpe < ts);
-                        const allTied   = targetSpeeds.every(ts => attackerSpe === ts);
-                        if (allFaster) return <span style={{ color: '#38a169', fontSize: '11px' }}>▲</span>;
-                        if (allSlower) return <span style={{ color: '#e53e3e', fontSize: '11px' }}>▼</span>;
-                        if (allTied)   return <span style={{ color: '#d69e2e', fontSize: '11px' }}>═</span>;
+                        // "good" = moves first = faster normally, slower in TR
+                        const allGood = filters.trickRoom
+                          ? targetSpeeds.every(ts => attackerSpe < ts)
+                          : targetSpeeds.every(ts => attackerSpe > ts);
+                        const allBad = filters.trickRoom
+                          ? targetSpeeds.every(ts => attackerSpe > ts)
+                          : targetSpeeds.every(ts => attackerSpe < ts);
+                        const allTied = targetSpeeds.every(ts => attackerSpe === ts);
+                        if (allGood) return <span style={{ color: '#38a169', fontSize: '11px' }}>▲</span>;
+                        if (allBad)  return <span style={{ color: '#e53e3e', fontSize: '11px' }}>▼</span>;
+                        if (allTied) return <span style={{ color: '#d69e2e', fontSize: '11px' }}>═</span>;
                         return <span style={{ color: '#888', fontSize: '11px' }}>~</span>;
                       })()}
                     </span>
                   </Tooltip>
 
-                  {/* Ability chips — far right of row 1 */}
+                  {/* Ability chips — far right */}
                   {pokemon.abilities.length > 0 && (
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {pokemon.abilities.map(ability => (
@@ -266,7 +652,7 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                   )}
                 </div>
 
-                {/* Row 2: move counts + status badge, right-aligned */}
+                {/* Row 2: move counts + status badge */}
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   {moveCounts.map((mc, i) => (
                     <div key={i} style={{ textAlign: 'right' }}>
@@ -352,9 +738,7 @@ function MoveTable({ moves, data, totalTargets, targetNames }: {
               <td style={{ ...td, fontWeight: 600 }}>
                 {/* Move name with description tooltip */}
                 <Tooltip
-                  content={m.move.description
-                    ? <>{m.move.description}</>
-                    : null}
+                  content={m.move.description ? <>{m.move.description}</> : null}
                   maxWidth={260}
                   side="bottom"
                 >
@@ -367,6 +751,12 @@ function MoveTable({ moves, data, totalTargets, targetNames }: {
                 </Tooltip>
                 {m.stab && (
                   <span style={{ marginLeft: '4px', fontSize: '10px', color: '#dd6b20', fontWeight: 700 }}>STAB</span>
+                )}
+                {/* Held item icon — only shown when required */}
+                {m.item && (
+                  <span style={{ marginLeft: '5px', display: 'inline-flex', alignItems: 'center' }}>
+                    <ItemIcon identifier={m.item.identifier} name={m.item.name} boost={m.item.boost} />
+                  </span>
                 )}
                 {totalTargets > 1 && m.coveredTargetIndices.length > 1 && (
                   <Tooltip
@@ -471,6 +861,8 @@ function StatusBadge({ allGuaranteed }: { allGuaranteed: boolean }) {
   );
 }
 
+// ── Styles ───────────────────────────────────────────────────────────────────
+
 const th: React.CSSProperties = {
   padding: '5px 8px', textAlign: 'left', fontWeight: 700,
   fontSize: '11px', textTransform: 'uppercase', color: '#aaa', letterSpacing: '0.04em',
@@ -487,4 +879,20 @@ const possibleBadge: React.CSSProperties = {
 const btnStyle: React.CSSProperties = {
   padding: '5px 12px', fontSize: '12px', border: '1px solid #ddd',
   borderRadius: '6px', background: '#fff', cursor: 'pointer', color: '#555',
+};
+const toggleBtnStyle: React.CSSProperties = {
+  padding: '3px 10px', fontSize: '12px', border: '1px solid #ddd',
+  borderRadius: '5px', cursor: 'pointer', fontWeight: 500,
+};
+const filterLabel: React.CSSProperties = {
+  fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
+  letterSpacing: '0.05em', color: '#888',
+};
+const numInputStyle: React.CSSProperties = {
+  width: '64px', padding: '4px 6px', border: '1px solid #ddd',
+  borderRadius: '5px', fontSize: '13px',
+};
+const clearChipStyle: React.CSSProperties = {
+  fontSize: '11px', padding: '2px 8px', border: '1px solid #ddd',
+  borderRadius: '4px', background: '#fff', cursor: 'pointer', color: '#999',
 };
