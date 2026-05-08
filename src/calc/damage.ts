@@ -4,6 +4,7 @@ export interface EVSpread {
   hp: number;
   def: number;
   spd: number;
+  spe: number;
 }
 
 export interface TargetConfig {

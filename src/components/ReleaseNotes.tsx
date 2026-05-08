@@ -5,6 +5,22 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.4.0',
+    date: 'May 2026',
+    title: 'Target Speed EVs',
+    sections: [
+      {
+        heading: '⚡ Speed EVs on Target Pokémon',
+        items: [
+          'Each target Pokémon panel now has a "Spe EVs" input alongside HP, Def, and SpD EVs.',
+          'The Speed stat pill in the panel updates live as you type to reflect the invested speed.',
+          'Outspeed comparisons throughout the results — the ▲/▼ indicator, the speed tooltip, and the "Must outspeed" filter — all now use the EV-adjusted speed instead of assuming 0 EVs.',
+          'Existing saved targets load cleanly, defaulting Speed EVs to 0.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.3.0',
     date: 'May 2026',
     title: 'Ability Modifiers, Weather, Sorting & UI Polish',

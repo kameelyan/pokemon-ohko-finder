@@ -10,7 +10,7 @@ import TypeBadge from './components/TypeBadge';
 import Tooltip from './components/Tooltip';
 import { APP_VERSION } from './version';
 
-const DEFAULT_EVS: EVSpread = { hp: 0, def: 0, spd: 0 };
+const DEFAULT_EVS: EVSpread = { hp: 0, def: 0, spd: 0, spe: 0 };
 const MAX_TARGETS = 6;
 const STORAGE_KEY = 'ohko-finder-slots';
 
@@ -69,7 +69,7 @@ export default function App() {
           const restored = saved.map(s => ({
             id: nextId++,
             pokemon: s.pokemonId != null ? (data.pokemon.get(s.pokemonId) ?? null) : null,
-            evs: s.evs ?? { ...DEFAULT_EVS },
+            evs: { ...DEFAULT_EVS, ...s.evs },
             mustOutspeed: s.mustOutspeed ?? false,
             heldItem: TARGET_HELD_ITEMS.find(i => i.identifier === s.heldItemIdentifier) ?? null,
           }));
@@ -115,13 +115,13 @@ export default function App() {
     .filter(s => s.pokemon !== null)
     .map(s => ({ pokemon: s.pokemon!, evs: s.evs, heldItem: s.heldItem ?? undefined }));
 
-  // Uninvested L50 speed for each active target (0 EVs, 31 IVs, neutral nature)
-  const targetSpeeds: number[] = activeTargets.map(t => calcStat(t.pokemon.stats.spe, 0));
+  // EV-invested L50 speed for each active target
+  const targetSpeeds: number[] = activeTargets.map(t => calcStat(t.pokemon.stats.spe, t.evs.spe));
 
   // Speeds of targets with mustOutspeed checked (passed to results view for filtering)
   const mustOutspeedSpeeds: number[] = slots
     .filter(s => s.pokemon !== null && s.mustOutspeed)
-    .map(s => calcStat(s.pokemon!.stats.spe, 0));
+    .map(s => calcStat(s.pokemon!.stats.spe, s.evs.spe));
 
   useEffect(() => {
     if (!data || activeTargets.length === 0) { setResults([]); return; }
@@ -423,7 +423,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, on
   const hp  = selected ? calcHP(selected.stats.hp, evs.hp) : 0;
   const def = selected ? calcStat(selected.stats.def, evs.def) : 0;
   const spd = selected ? calcStat(selected.stats.spd, evs.spd) : 0;
-  const spe = selected ? calcStat(selected.stats.spe, 0) : 0;
+  const spe = selected ? calcStat(selected.stats.spe, evs.spe) : 0;
 
   return (
     <div style={{
@@ -483,6 +483,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, on
             <EVInput label="HP EVs"  value={evs.hp}  onChange={v => onEvsChange({ ...evs, hp: v })} />
             <EVInput label="Def EVs" value={evs.def} onChange={v => onEvsChange({ ...evs, def: v })} />
             <EVInput label="SpD EVs" value={evs.spd} onChange={v => onEvsChange({ ...evs, spd: v })} />
+            <EVInput label="Spe EVs" value={evs.spe} onChange={v => onEvsChange({ ...evs, spe: v })} />
           </div>
 
           {/* Held item */}
