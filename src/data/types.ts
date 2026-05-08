@@ -22,6 +22,8 @@ export interface Pokemon {
   abilities: PokemonAbility[];
 }
 
+export type MoveFlag = 'contact' | 'punch' | 'sound' | 'powder' | 'bite' | 'pulse' | 'ballistics' | 'dance';
+
 export interface Move {
   id: number;
   identifier: string;
@@ -31,6 +33,8 @@ export interface Move {
   damageClassId: number; // 2 = physical, 3 = special
   accuracy: number | null; // null = always hits (e.g. Swift, Aerial Ace)
   description: string;
+  priority: number;       // 0 = normal, +1/+2 = fast priority, negative = slow
+  flags: MoveFlag[];
 }
 
 export interface PokemonMoveEntry {

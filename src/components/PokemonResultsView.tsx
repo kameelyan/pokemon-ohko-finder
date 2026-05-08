@@ -1,9 +1,23 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { PokemonOHKOResult, OHKOMoveInfo } from '../calc/damage';
+import type { MoveFlag } from '../data/types';
 import { calcStat } from '../calc/damage';
 import type { GameData, Pokemon } from '../data/types';
 import TypeBadge from './TypeBadge';
 import Tooltip from './Tooltip';
+
+const FLAG_INFO: Record<MoveFlag, { label: string; description: string; bg: string; color: string }> = {
+  contact:    { label: 'Contact',   description: 'Makes contact — triggers Rocky Helmet, Rough Skin, Static, etc.',      bg: '#feebc8', color: '#7b341e' },
+  punch:      { label: 'Punch',     description: 'Punch move — boosted by Iron Fist',                                    bg: '#bee3f8', color: '#2a4365' },
+  sound:      { label: 'Sound',     description: 'Sound move — blocked by Soundproof; boosted by Throat Spray',          bg: '#e9d8fd', color: '#553c9a' },
+  powder:     { label: 'Powder',    description: 'Powder move — blocked by Safety Goggles, Overcoat, and Grass-types',   bg: '#fefcbf', color: '#744210' },
+  bite:       { label: 'Bite',      description: 'Bite move — boosted by Strong Jaw',                                    bg: '#fed7d7', color: '#742a2a' },
+  pulse:      { label: 'Pulse',     description: 'Pulse/aura move — boosted by Mega Launcher',                           bg: '#b2f5ea', color: '#234e52' },
+  ballistics: { label: 'Ballistic', description: 'Ballistic move — blocked by Bulletproof',                              bg: '#e2e8f0', color: '#2d3748' },
+  dance:      { label: 'Dance',     description: 'Dance move — triggers the Dancer ability',                             bg: '#fed7e2', color: '#702459' },
+};
+
+const ALL_MOVE_FLAGS: MoveFlag[] = ['contact', 'punch', 'sound', 'powder', 'bite', 'pulse', 'ballistics', 'dance'];
 
 function CategoryIcon({ damageClassId }: { damageClassId: number }) {
   const [failed, setFailed] = useState(false);
@@ -120,6 +134,7 @@ interface Filters {
   noEvs: boolean;
   noItem: boolean;
   defaultOnly: boolean;
+  excludedFlags: Set<MoveFlag>;
 }
 
 const EMPTY_FILTERS: Filters = {
@@ -132,6 +147,7 @@ const EMPTY_FILTERS: Filters = {
   noEvs: false,
   noItem: false,
   defaultOnly: false,
+  excludedFlags: new Set(),
 };
 
 function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boolean): number {
@@ -145,6 +161,7 @@ function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boole
     (f.noEvs ? 1 : 0) +
     (f.noItem ? 1 : 0) +
     (f.defaultOnly ? 1 : 0) +
+    (f.excludedFlags.size > 0 ? 1 : 0) +
     (showPossible ? 1 : 0) +
     (minAccuracy > 0 ? 1 : 0)
   );
@@ -201,6 +218,12 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
       if (filters.noEvs && !r.movesPerTarget.every(moves => moves.some(m => m.evNeeded === 0))) return false;
       if (filters.noItem && !r.movesPerTarget.every(moves => moves.some(m => !m.item))) return false;
       if (filters.defaultOnly && !r.pokemon.isDefault) return false;
+      if (filters.excludedFlags.size > 0) {
+        // Keep only Pokémon that have at least one OHKO move per target with none of the excluded flags
+        if (!r.movesPerTarget.every(moves =>
+          moves.some(m => !m.move.flags.some(f => filters.excludedFlags.has(f)))
+        )) return false;
+      }
       if (championsOnly && !data.championsRoster.has(r.pokemon.speciesId)) return false;
 
       return true;
@@ -379,26 +402,31 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
 
             <div>
               <div style={filterLabel}>Min. Accuracy</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
-                <input
-                  type="range" min={0} max={100} step={5} value={minAccuracy}
-                  onChange={e => onMinAccuracyChange(Number(e.target.value))}
-                  style={{ width: '140px', accentColor: '#e53e3e', cursor: 'pointer' }}
-                />
-                <span style={{
-                  fontWeight: 700, fontSize: '14px', minWidth: '44px',
-                  color: minAccuracy === 0 ? '#aaa' : minAccuracy >= 90 ? '#38a169' : '#d69e2e',
-                }}>
-                  {minAccuracy === 0 ? 'Any' : `${minAccuracy}%`}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#bbb', width: '140px', marginTop: '2px' }}>
-                <span>Any</span><span>50%</span><span>100%</span>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                {([
+                  [0,   'Any'],
+                  [50,  '50%'],
+                  [70,  '70%'],
+                  [80,  '80%'],
+                  [90,  '90%'],
+                  [100, '100%'],
+                ] as [number, string][]).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => onMinAccuracyChange(val)}
+                    style={{
+                      ...toggleBtnStyle,
+                      background: minAccuracy === val ? '#e53e3e' : '#fff',
+                      color: minAccuracy === val ? '#fff' : '#555',
+                      borderColor: minAccuracy === val ? '#e53e3e' : '#ddd',
+                    }}
+                  >{label}</button>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Row 3: Category + Form */}
+          {/* Row 3: Category + Flags + Other */}
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             <div>
               <div style={filterLabel}>Move Category</div>
@@ -419,6 +447,16 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                     }}
                   >{label}</button>
                 ))}
+              </div>
+            </div>
+
+            <div>
+              <div style={filterLabel}>Move Flags</div>
+              <div style={{ marginTop: '6px' }}>
+                <MoveFlagsDropdown
+                  excludedFlags={filters.excludedFlags}
+                  onChange={next => setFilter('excludedFlags', next)}
+                />
               </div>
             </div>
 
@@ -753,6 +791,35 @@ function MoveTable({ moves, data, totalTargets, targetNames }: {
                 {m.stab && (
                   <span style={{ marginLeft: '4px', fontSize: '10px', color: '#dd6b20', fontWeight: 700 }}>STAB</span>
                 )}
+                {/* Priority chip */}
+                {m.move.priority !== 0 && (
+                  <Tooltip
+                    content={m.move.priority > 0 ? `Priority +${m.move.priority} — moves before most attacks` : `Negative priority (${m.move.priority}) — moves last`}
+                    side="bottom"
+                  >
+                    <span style={{
+                      marginLeft: '4px', fontSize: '10px', fontWeight: 700, cursor: 'help',
+                      background: m.move.priority > 0 ? '#c6f6d5' : '#fed7d7',
+                      color: m.move.priority > 0 ? '#276749' : '#9b2c2c',
+                      borderRadius: '3px', padding: '1px 4px',
+                    }}>
+                      {m.move.priority > 0 ? `+${m.move.priority}` : m.move.priority}
+                    </span>
+                  </Tooltip>
+                )}
+                {/* Flag chips */}
+                {m.move.flags.map(flag => (
+                  <Tooltip key={flag} content={FLAG_INFO[flag]?.description ?? flag} side="bottom">
+                    <span style={{
+                      marginLeft: '4px', fontSize: '10px', fontWeight: 600, cursor: 'help',
+                      background: FLAG_INFO[flag]?.bg ?? '#e2e8f0',
+                      color: FLAG_INFO[flag]?.color ?? '#4a5568',
+                      borderRadius: '3px', padding: '1px 4px',
+                    }}>
+                      {FLAG_INFO[flag]?.label ?? flag}
+                    </span>
+                  </Tooltip>
+                ))}
                 {totalTargets > 1 && m.coveredTargetIndices.length > 1 && (
                   <Tooltip
                     content={
@@ -863,6 +930,103 @@ function StatusBadge({ allGuaranteed }: { allGuaranteed: boolean }) {
     <span style={{ background: '#d69e2e', color: '#fff', padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
       Possible
     </span>
+  );
+}
+
+function MoveFlagsDropdown({
+  excludedFlags,
+  onChange,
+}: {
+  excludedFlags: Set<MoveFlag>;
+  onChange: (flags: Set<MoveFlag>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const excludedCount = excludedFlags.size;
+  const total = ALL_MOVE_FLAGS.length;
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          ...toggleBtnStyle,
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          background: excludedCount > 0 ? '#fff5f5' : '#fff',
+          borderColor: excludedCount > 0 ? '#e53e3e' : '#ddd',
+          color: excludedCount > 0 ? '#c53030' : '#555',
+        }}
+      >
+        {excludedCount === 0 ? `All flags` : `${total - excludedCount}/${total} flags`}
+        <span style={{ fontSize: '10px' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200,
+          background: '#fff', border: '1px solid #e2e8f0',
+          borderRadius: '8px', padding: '10px 12px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          minWidth: '260px',
+        }}>
+          {/* 3-column grid: checkbox | chip | description */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '16px auto 1fr',
+            gap: '7px 10px',
+            alignItems: 'center',
+          }}>
+            {ALL_MOVE_FLAGS.map(flag => (
+              <React.Fragment key={flag}>
+                <input
+                  id={`flag-${flag}`}
+                  type="checkbox"
+                  checked={!excludedFlags.has(flag)}
+                  style={{ margin: 0, cursor: 'pointer' }}
+                  onChange={e => {
+                    const next = new Set(excludedFlags);
+                    e.target.checked ? next.delete(flag) : next.add(flag);
+                    onChange(next);
+                  }}
+                />
+                <label htmlFor={`flag-${flag}`} style={{ cursor: 'pointer', margin: 0 }}>
+                  <span style={{
+                    background: FLAG_INFO[flag].bg, color: FLAG_INFO[flag].color,
+                    borderRadius: '3px', padding: '1px 6px',
+                    fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
+                  }}>
+                    {FLAG_INFO[flag].label}
+                  </span>
+                </label>
+                <label htmlFor={`flag-${flag}`} style={{
+                  cursor: 'pointer', margin: 0,
+                  fontSize: '11px', color: '#888', lineHeight: 1.4,
+                }}>
+                  {FLAG_INFO[flag].description.split('—')[1]?.trim() ?? ''}
+                </label>
+              </React.Fragment>
+            ))}
+          </div>
+          {excludedCount > 0 && (
+            <button
+              onClick={() => onChange(new Set())}
+              style={{ ...clearChipStyle, marginTop: '8px', width: '100%', textAlign: 'center' }}
+            >
+              ✕ Show all flags
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

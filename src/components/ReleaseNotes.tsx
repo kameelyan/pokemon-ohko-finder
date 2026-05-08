@@ -5,6 +5,47 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.2.0',
+    date: 'May 2026',
+    title: 'Move Flags, Target Items & Accuracy Fix',
+    sections: [
+      {
+        heading: '🏷 Move Flags',
+        items: [
+          'Each move in the results table now shows small colour-coded badges for notable properties: Contact, Punch, Sound, Powder, Bite, Pulse, Ballistic, and Dance.',
+          'Hover any badge to see a tooltip explaining what it interacts with in battle — for example Contact warns about Rocky Helmet and Rough Skin, while Sound notes Soundproof immunity.',
+          'Priority moves show a green "+1" or "+2" chip (red for negative priority) so you can immediately see which moves go before or after normal attacks.',
+        ],
+      },
+      {
+        heading: '🔍 Move Flags Filter',
+        items: [
+          'A new "Move Flags" dropdown has been added to the Filters panel alongside Move Category.',
+          'All flags are checked by default (no filtering). Uncheck a flag — say, Contact — to hide any Pokémon that can only OHKO via moves of that type, so you can find attackers that won\'t trigger Rocky Helmet or Rough Skin.',
+          'The dropdown uses a clean grid layout: checkboxes, flag chips, and descriptions all line up in their own columns.',
+        ],
+      },
+      {
+        heading: '🎒 Target Held Items',
+        items: [
+          'Each target Pokémon panel now has a Held Item dropdown that appears once a Pokémon is selected.',
+          'Items are grouped into three categories: Stat Boosts (Eviolite, Assault Vest), Accuracy Reduction (Bright Powder, Lax Incense), and Type-Resist Berries (all 18, e.g. Occa Berry for Fire).',
+          'Type-resist berries show their type name in the dropdown — "Occa Berry (Fire)" — so you don\'t need to remember which berry covers which type.',
+          'Hover the item icon to see a tooltip describing exactly what the item does — e.g. "Boosts Sp. Def by 50% (special moves only)" for Assault Vest.',
+          'All item effects are factored into the OHKO calculations: stat boosts raise the effective Defence or Sp. Defence, accuracy-reducing items lower the chance a move lands, and berries halve damage from the matching type.',
+          'Your chosen item is saved and restored automatically with the rest of your target settings.',
+        ],
+      },
+      {
+        heading: '🎯 Accuracy Filter (Bug Fix)',
+        items: [
+          'The accuracy filter was previously a slider, which caused the filter panel to close unexpectedly when tapped on mobile.',
+          'It has been replaced with a button group — Any / 50% / 70% / 80% / 90% / 100% — matching the style of the other filters and working reliably on touch screens.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.1.0',
     date: 'May 2026',
     title: 'Filters, Held Items, Trick Room & Champions',

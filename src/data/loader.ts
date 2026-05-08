@@ -1,5 +1,5 @@
 // Data is served relative to the app base path (import.meta.env.BASE_URL).
-import type { GameData, Move, Pokemon, PokemonAbility } from './types';
+import type { GameData, Move, MoveFlag, Pokemon, PokemonAbility } from './types';
 
 function parseCSV(text: string): Record<string, string>[] {
   const lines = text.trim().split('\n');
@@ -50,6 +50,7 @@ export async function loadGameData(): Promise<GameData> {
     formNamesRows,
     pokemonAbilitiesJson,
     championsRosterJson,
+    moveFlagsJson,
   ] = await Promise.all([
     fetchCSV(`${base}data/pokemon.csv`),
     fetchCSV(`${base}data/pokemon_species_names.csv`),
@@ -65,6 +66,7 @@ export async function loadGameData(): Promise<GameData> {
     fetchCSV(`${base}data/pokemon_form_names.csv`),
     fetchJSON<Record<string, PokemonAbility[]>>(`${base}data/pokemon_abilities.json`),
     fetchJSON<number[]>(`${base}data/champions_roster.json`),
+    fetchJSON<Record<string, MoveFlag[]>>(`${base}data/move_flags.json`),
   ]);
 
   // English species names (language_id = 9)
@@ -187,6 +189,8 @@ export async function loadGameData(): Promise<GameData> {
       damageClassId,
       accuracy,
       description: moveDescriptions[id] ?? '',
+      priority: Number(row.priority) || 0,
+      flags: moveFlagsJson[String(id)] ?? [],
     });
   }
 

@@ -9,7 +9,44 @@ export interface EVSpread {
 export interface TargetConfig {
   pokemon: Pokemon;
   evs: EVSpread;
+  heldItem?: TargetHeldItem;
 }
+
+export interface TargetHeldItem {
+  name: string;
+  identifier: string;
+  defMult: number;      // multiplier on Def (e.g. 1.5 for Eviolite)
+  spdMult: number;      // multiplier on SpD (e.g. 1.5 for Eviolite / Assault Vest)
+  accuracyMult: number; // multiplier on move accuracy (e.g. 0.9 for Bright Powder)
+  typeResists: { typeId: number; mult: number }[]; // berry type damage reductions
+}
+
+/** Defensive held items available on target Pokémon. */
+export const TARGET_HELD_ITEMS: TargetHeldItem[] = [
+  { name: 'Eviolite',      identifier: 'eviolite',      defMult: 1.5, spdMult: 1.5, accuracyMult: 1.0, typeResists: [] },
+  { name: 'Assault Vest',  identifier: 'assault-vest',  defMult: 1.0, spdMult: 1.5, accuracyMult: 1.0, typeResists: [] },
+  { name: 'Bright Powder', identifier: 'brightpowder',  defMult: 1.0, spdMult: 1.0, accuracyMult: 0.9, typeResists: [] },
+  { name: 'Lax Incense',   identifier: 'lax-incense',   defMult: 1.0, spdMult: 1.0, accuracyMult: 0.9, typeResists: [] },
+  // Type-resist berries — halve damage from the matching type
+  { name: 'Chilan Berry',  identifier: 'chilan-berry',  defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 1,  mult: 0.5 }] },
+  { name: 'Chople Berry',  identifier: 'chople-berry',  defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 2,  mult: 0.5 }] },
+  { name: 'Coba Berry',    identifier: 'coba-berry',    defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 3,  mult: 0.5 }] },
+  { name: 'Kebia Berry',   identifier: 'kebia-berry',   defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 4,  mult: 0.5 }] },
+  { name: 'Shuca Berry',   identifier: 'shuca-berry',   defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 5,  mult: 0.5 }] },
+  { name: 'Charti Berry',  identifier: 'charti-berry',  defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 6,  mult: 0.5 }] },
+  { name: 'Tanga Berry',   identifier: 'tanga-berry',   defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 7,  mult: 0.5 }] },
+  { name: 'Kasib Berry',   identifier: 'kasib-berry',   defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 8,  mult: 0.5 }] },
+  { name: 'Babiri Berry',  identifier: 'babiri-berry',  defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 9,  mult: 0.5 }] },
+  { name: 'Occa Berry',    identifier: 'occa-berry',    defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 10, mult: 0.5 }] },
+  { name: 'Passho Berry',  identifier: 'passho-berry',  defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 11, mult: 0.5 }] },
+  { name: 'Rindo Berry',   identifier: 'rindo-berry',   defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 12, mult: 0.5 }] },
+  { name: 'Wacan Berry',   identifier: 'wacan-berry',   defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 13, mult: 0.5 }] },
+  { name: 'Payapa Berry',  identifier: 'payapa-berry',  defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 14, mult: 0.5 }] },
+  { name: 'Yache Berry',   identifier: 'yache-berry',   defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 15, mult: 0.5 }] },
+  { name: 'Haban Berry',   identifier: 'haban-berry',   defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 16, mult: 0.5 }] },
+  { name: 'Colbur Berry',  identifier: 'colbur-berry',  defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 17, mult: 0.5 }] },
+  { name: 'Roseli Berry',  identifier: 'roseli-berry',  defMult: 1.0, spdMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 18, mult: 0.5 }] },
+];
 
 export interface HeldItem {
   name: string;
@@ -141,6 +178,10 @@ export function findPokemonOHKOs(
     hp: calcHP(t.pokemon.stats.hp, t.evs.hp),
     def: calcStat(t.pokemon.stats.def, t.evs.def),
     spd: calcStat(t.pokemon.stats.spd, t.evs.spd),
+    defMult: t.heldItem?.defMult ?? 1.0,
+    spdMult: t.heldItem?.spdMult ?? 1.0,
+    accuracyMult: t.heldItem?.accuracyMult ?? 1.0,
+    typeResists: t.heldItem?.typeResists ?? [],
   }));
 
   const results: PokemonOHKOResult[] = [];
@@ -167,9 +208,24 @@ export function findPokemonOHKOs(
 
       for (let ti = 0; ti < targetStats.length; ti++) {
         const ts = targetStats[ti];
-        const defStat = isPhysical ? ts.def : ts.spd;
-        const effFactor = getEffectiveness(move.typeId, ts.pokemon.typeIds, data.typeEfficacy);
+
+        // Apply held-item defensive multiplier (Eviolite boosts both; AV boosts SpD only)
+        const rawDef = isPhysical ? ts.def : ts.spd;
+        const statMult = isPhysical ? ts.defMult : ts.spdMult;
+        const defStat = Math.floor(rawDef * statMult);
+
+        // Apply held-item accuracy reduction (Bright Powder, Lax Incense)
+        // null accuracy = always hits, unaffected by accuracy items
+        const moveAcc = move.accuracy;
+        const adjAccuracy = moveAcc === null ? null : moveAcc * ts.accuracyMult;
+        if (adjAccuracy !== null && adjAccuracy < minAccuracy) continue;
+
+        let effFactor = getEffectiveness(move.typeId, ts.pokemon.typeIds, data.typeEfficacy);
         if (effFactor === 0) continue;
+
+        // Apply type-resist berry (e.g. Occa Berry halves Fire damage)
+        const berry = ts.typeResists.find(r => r.typeId === move.typeId);
+        if (berry) effFactor = Math.floor(effFactor * berry.mult);
 
         // 1. Try without any item
         let evNeeded = minEVsToOHKO(move.power, atkBase, defStat, ts.hp, stab, effFactor, !showPossible);

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { loadGameData } from './data/loader';
 import type { GameData, Pokemon } from './data/types';
-import { findPokemonOHKOs, calcHP, calcStat } from './calc/damage';
-import type { PokemonOHKOResult, EVSpread, TargetConfig } from './calc/damage';
+import { findPokemonOHKOs, calcHP, calcStat, TARGET_HELD_ITEMS } from './calc/damage';
+import type { PokemonOHKOResult, EVSpread, TargetConfig, TargetHeldItem } from './calc/damage';
 import PokemonSearch from './components/PokemonSearch';
 import PokemonResultsView from './components/PokemonResultsView';
 import ReleaseNotes from './components/ReleaseNotes';
 import TypeBadge from './components/TypeBadge';
+import Tooltip from './components/Tooltip';
 import { APP_VERSION } from './version';
 
 const DEFAULT_EVS: EVSpread = { hp: 0, def: 0, spd: 0 };
@@ -18,6 +19,7 @@ interface TargetSlot {
   pokemon: Pokemon | null;
   evs: EVSpread;
   mustOutspeed: boolean;
+  heldItem: TargetHeldItem | null;
 }
 
 /** Shape written to / read from localStorage (no full Pokemon object). */
@@ -25,11 +27,12 @@ interface SavedSlot {
   pokemonId: number | null;
   evs: EVSpread;
   mustOutspeed?: boolean;
+  heldItemIdentifier?: string;
 }
 
 let nextId = 1;
 function makeSlot(): TargetSlot {
-  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false };
+  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false, heldItem: null };
 }
 
 export default function App() {
@@ -67,6 +70,7 @@ export default function App() {
             pokemon: s.pokemonId != null ? (data.pokemon.get(s.pokemonId) ?? null) : null,
             evs: s.evs ?? { ...DEFAULT_EVS },
             mustOutspeed: s.mustOutspeed ?? false,
+            heldItem: TARGET_HELD_ITEMS.find(i => i.identifier === s.heldItemIdentifier) ?? null,
           }));
           restoredRef.current = true; // open gate before setSlots so the next save is correct
           setSlots(restored);
@@ -84,6 +88,7 @@ export default function App() {
       pokemonId: s.pokemon?.id ?? null,
       evs: s.evs,
       mustOutspeed: s.mustOutspeed,
+      heldItemIdentifier: s.heldItem?.identifier,
     }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   }, [slots]);
@@ -107,7 +112,7 @@ export default function App() {
   // Slots with a selected Pokémon
   const activeTargets: TargetConfig[] = slots
     .filter(s => s.pokemon !== null)
-    .map(s => ({ pokemon: s.pokemon!, evs: s.evs }));
+    .map(s => ({ pokemon: s.pokemon!, evs: s.evs, heldItem: s.heldItem ?? undefined }));
 
   // Uninvested L50 speed for each active target (0 EVs, 31 IVs, neutral nature)
   const targetSpeeds: number[] = activeTargets.map(t => calcStat(t.pokemon.stats.spe, 0));
@@ -279,10 +284,12 @@ export default function App() {
                     selected={slot.pokemon}
                     evs={slot.evs}
                     mustOutspeed={slot.mustOutspeed}
+                    heldItem={slot.heldItem}
                     onSelect={p => updateSlot(slot.id, { pokemon: p, evs: { ...DEFAULT_EVS } })}
                     onRemove={slots.length > 1 ? () => removeSlot(slot.id) : undefined}
                     onEvsChange={evs => updateSlot(slot.id, { evs })}
                     onMustOutspeedChange={v => updateSlot(slot.id, { mustOutspeed: v })}
+                    onHeldItemChange={item => updateSlot(slot.id, { heldItem: item })}
                     data={data!}
                   />
                 ))}
@@ -365,16 +372,51 @@ export default function App() {
   );
 }
 
-function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, onSelect, onRemove, onEvsChange, onMustOutspeedChange, data }: {
+function heldItemDescription(item: TargetHeldItem, data: GameData): string {
+  const parts: string[] = [];
+  if (item.defMult > 1 && item.spdMult > 1)
+    parts.push(`Boosts Def and Sp. Def by ${Math.round((item.defMult - 1) * 100)}%`);
+  else if (item.defMult > 1)
+    parts.push(`Boosts Def by ${Math.round((item.defMult - 1) * 100)}%`);
+  else if (item.spdMult > 1)
+    parts.push(`Boosts Sp. Def by ${Math.round((item.spdMult - 1) * 100)}% (special moves only)`);
+  if (item.accuracyMult < 1)
+    parts.push(`Reduces incoming move accuracy by ${Math.round((1 - item.accuracyMult) * 100)}%`);
+  for (const r of item.typeResists) {
+    const typeName = data.typeNames.get(r.typeId) ?? 'unknown';
+    parts.push(`Halves damage from ${typeName}-type moves`);
+  }
+  return parts.join(' · ');
+}
+
+// Group TARGET_HELD_ITEMS into categories for the dropdown
+const HELD_ITEM_GROUPS: { label: string; items: typeof TARGET_HELD_ITEMS }[] = [
+  {
+    label: 'Stat Boosts',
+    items: TARGET_HELD_ITEMS.filter(i => i.defMult > 1 || i.spdMult > 1),
+  },
+  {
+    label: 'Accuracy Reduction',
+    items: TARGET_HELD_ITEMS.filter(i => i.accuracyMult < 1),
+  },
+  {
+    label: 'Type-Resist Berries',
+    items: TARGET_HELD_ITEMS.filter(i => i.typeResists.length > 0),
+  },
+];
+
+function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, onSelect, onRemove, onEvsChange, onMustOutspeedChange, onHeldItemChange, data }: {
   label: string;
   pokemon: Pokemon[];
   selected: Pokemon | null;
   evs: EVSpread;
   mustOutspeed: boolean;
+  heldItem: TargetHeldItem | null;
   onSelect: (p: Pokemon) => void;
   onRemove?: () => void;
   onEvsChange: (evs: EVSpread) => void;
   onMustOutspeedChange: (v: boolean) => void;
+  onHeldItemChange: (item: TargetHeldItem | null) => void;
   data: GameData;
 }) {
   const hp  = selected ? calcHP(selected.stats.hp, evs.hp) : 0;
@@ -440,6 +482,49 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, onSelect, on
             <EVInput label="HP EVs"  value={evs.hp}  onChange={v => onEvsChange({ ...evs, hp: v })} />
             <EVInput label="Def EVs" value={evs.def} onChange={v => onEvsChange({ ...evs, def: v })} />
             <EVInput label="SpD EVs" value={evs.spd} onChange={v => onEvsChange({ ...evs, spd: v })} />
+          </div>
+
+          {/* Held item */}
+          <div style={{ marginTop: '10px' }}>
+            <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Held Item
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {heldItem && (
+                <Tooltip content={heldItemDescription(heldItem, data)} maxWidth={220}>
+                  <img
+                    src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${heldItem.identifier}.png`}
+                    alt={heldItem.name}
+                    width={20} height={20}
+                    style={{ imageRendering: 'pixelated', flexShrink: 0, cursor: 'help' }}
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </Tooltip>
+              )}
+              <select
+                value={heldItem?.identifier ?? ''}
+                onChange={e => {
+                  const found = TARGET_HELD_ITEMS.find(i => i.identifier === e.target.value);
+                  onHeldItemChange(found ?? null);
+                }}
+                style={{
+                  flex: 1, padding: '4px 6px', border: '1px solid #ddd',
+                  borderRadius: '5px', fontSize: '12px', background: '#fff',
+                  color: heldItem ? '#333' : '#aaa', cursor: 'pointer',
+                }}
+              >
+                <option value="">None</option>
+                {HELD_ITEM_GROUPS.map(group => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.items.map(item => (
+                      <option key={item.identifier} value={item.identifier}>
+                        {item.name}{item.typeResists.length > 0 ? ` (${data.typeNames.get(item.typeResists[0].typeId) ?? ''})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
           </div>
 
           <label style={{
