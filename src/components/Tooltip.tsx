@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useLayoutEffect } from 'react';
 
 interface Props {
   children: React.ReactNode;
@@ -34,15 +34,29 @@ function TooltipPortal({
 }: {
   x: number; y: number; maxWidth: number; children: React.ReactNode;
 }) {
-  // Offset from cursor; flip upward if near bottom of viewport
+  const ref = useRef<HTMLSpanElement>(null);
+  // Start invisible so we can measure actual height before committing position
+  const [measured, setMeasured] = useState(false);
+  const [flipUp, setFlipUp] = useState(false);
+  const [height, setHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    if (ref.current) {
+      const h = ref.current.offsetHeight;
+      setHeight(h);
+      setFlipUp(y + h + 14 > window.innerHeight);
+      setMeasured(true);
+    }
+  }, [y]);
+
   const gap = 14;
-  const tipHeight = 120; // rough estimate to avoid overflow
-  const flipUp = y + tipHeight + gap > window.innerHeight;
+  const left = Math.min(x + gap, window.innerWidth - maxWidth - 8);
+  const top = flipUp ? y - height - gap : y + gap;
 
   const style: React.CSSProperties = {
     position: 'fixed',
-    left: Math.min(x + gap, window.innerWidth - maxWidth - 8),
-    top: flipUp ? y - tipHeight - gap : y + gap,
+    left,
+    top,
     background: '#1e2030',
     color: '#f0f0f0',
     padding: '8px 11px',
@@ -56,16 +70,9 @@ function TooltipPortal({
     boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
     whiteSpace: 'normal',
     textAlign: 'left',
+    // Hidden until measured to avoid flash of wrong position
+    opacity: measured ? 1 : 0,
   };
 
-  // Render directly into a fixed-position div at root level via an inline portal
-  return (
-    <span
-      style={style}
-      // Escape the stacking context by being rendered as fixed — React renders
-      // this in place but CSS fixed positioning ignores all ancestor overflow.
-    >
-      {children}
-    </span>
-  );
+  return <span ref={ref} style={style}>{children}</span>;
 }

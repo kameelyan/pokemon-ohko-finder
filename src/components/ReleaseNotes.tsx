@@ -13,7 +13,8 @@ const releases: {
         heading: '🎒 Held Items',
         items: [
           'The damage calculator now accounts for type-boosting held items (like Charcoal for Fire moves or Mystic Water for Water moves), each of which boost damage by 20%.',
-          "If a Pokémon can only land the KO with a held item's help, the item's icon appears next to the move name in the results. If no item is needed, nothing is shown.",
+          'A held item is only ever suggested when no amount of EV investment (0–252) can achieve the OHKO on its own. If maxing out EVs is enough, no item will be shown.',
+          "If a Pokémon genuinely needs a held item to land the KO, the item's icon appears next to the move name in the results. If no item is needed, nothing is shown.",
           'You can filter results to only show Pokémon that don\'t need a held item using the new "No held item required" checkbox in Filters.',
         ],
       },

@@ -31,7 +31,7 @@ function CategoryIcon({ damageClassId }: { damageClassId: number }) {
   );
 }
 
-function ItemIcon({ identifier, name, boost }: { identifier: string; name: string; boost: number }) {
+function ItemIcon({ identifier, name, boost, size = 16 }: { identifier: string; name: string; boost: number; size?: number }) {
   const [failed, setFailed] = useState(false);
   const src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${identifier}.png`;
   const pct = Math.round((boost - 1) * 100);
@@ -49,9 +49,9 @@ function ItemIcon({ identifier, name, boost }: { identifier: string; name: strin
       <img
         src={src}
         alt={name}
-        width={16}
-        height={16}
-        style={{ verticalAlign: 'middle', imageRendering: 'pixelated', cursor: 'help' }}
+        width={size}
+        height={size}
+        style={{ verticalAlign: 'middle', imageRendering: 'pixelated', cursor: 'help', display: 'block' }}
         onError={() => setFailed(true)}
       />
     </Tooltip>
@@ -718,6 +718,7 @@ function MoveTable({ moves, data, totalTargets, targetNames }: {
       <thead>
         <tr style={{ borderBottom: '1px solid #eee' }}>
           <th style={th}>Move</th>
+          <th style={{ ...th, textAlign: 'center', width: '28px' }}></th>
           <th style={th}>Type</th>
           <th style={{ ...th, textAlign: 'center' }}>BP</th>
           <th style={{ ...th, textAlign: 'center' }}>Acc</th>
@@ -752,12 +753,6 @@ function MoveTable({ moves, data, totalTargets, targetNames }: {
                 {m.stab && (
                   <span style={{ marginLeft: '4px', fontSize: '10px', color: '#dd6b20', fontWeight: 700 }}>STAB</span>
                 )}
-                {/* Held item icon — only shown when required */}
-                {m.item && (
-                  <span style={{ marginLeft: '5px', display: 'inline-flex', alignItems: 'center' }}>
-                    <ItemIcon identifier={m.item.identifier} name={m.item.name} boost={m.item.boost} />
-                  </span>
-                )}
                 {totalTargets > 1 && m.coveredTargetIndices.length > 1 && (
                   <Tooltip
                     content={
@@ -787,7 +782,17 @@ function MoveTable({ moves, data, totalTargets, targetNames }: {
                   </Tooltip>
                 )}
               </td>
-              <td style={td}><TypeBadge typeName={typeName} /></td>
+              {/* Dedicated held-item cell — larger icon, own column */}
+              <td style={{ ...td, textAlign: 'center', padding: '5px 4px' }}>
+                {m.item && (
+                  <ItemIcon identifier={m.item.identifier} name={m.item.name} boost={m.item.boost} size={24} />
+                )}
+              </td>
+              <td style={td}>
+                <span style={{ fontSize: '10px' }}>
+                  <TypeBadge typeName={typeName} />
+                </span>
+              </td>
               <td style={{ ...td, textAlign: 'center', color: '#777' }}>{m.move.power}</td>
               <td style={{ ...td, textAlign: 'center' }}>
                 {m.accuracy === null
