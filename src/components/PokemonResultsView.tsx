@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import type { PokemonOHKOResult, OHKOMoveInfo } from '../calc/damage';
+import type { PokemonOHKOResult, OHKOMoveInfo, Weather } from '../calc/damage';
+import { WEATHER_INFO } from '../calc/damage';
 import type { MoveFlag } from '../data/types';
 import { calcStat } from '../calc/damage';
 import type { GameData, Pokemon } from '../data/types';
@@ -39,7 +40,7 @@ function CategoryIcon({ damageClassId }: { damageClassId: number }) {
       alt={label}
       title={label}
       height={18}
-      style={{ verticalAlign: 'middle', display: 'block' }}
+      style={{ verticalAlign: 'middle', display: 'block', margin: '0 auto' }}
       onError={() => setFailed(true)}
     />
   );
@@ -83,6 +84,8 @@ interface Props {
   onShowPossibleChange: (v: boolean) => void;
   minAccuracy: number;
   onMinAccuracyChange: (v: number) => void;
+  weather: Weather;
+  onWeatherChange: (w: Weather) => void;
 }
 
 /** Full base-stat grid shown in the Pokémon header tooltip */
@@ -119,7 +122,21 @@ function statColor(val: number): string {
   return '#fc8181';
 }
 
-// ── Filter types ────────────────────────────────────────────────────────────
+// ── Sort + Filter types ──────────────────────────────────────────────────────
+
+type SortKey = 'bst' | 'name' | 'atk' | 'spa' | 'spe' | 'def' | 'spd' | 'hp';
+type SortDir = 'asc' | 'desc';
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'bst',  label: 'Base Stat Total' },
+  { key: 'name', label: 'Name' },
+  { key: 'spe',  label: 'Speed' },
+  { key: 'atk',  label: 'Attack' },
+  { key: 'spa',  label: 'Sp. Attack' },
+  { key: 'def',  label: 'Defense' },
+  { key: 'spd',  label: 'Sp. Defense' },
+  { key: 'hp',   label: 'HP' },
+];
 
 type OutspeedFilter = 'any' | 'all' | 'none';
 type CategoryFilter = 'all' | 'physical' | 'special';
@@ -150,7 +167,7 @@ const EMPTY_FILTERS: Filters = {
   excludedFlags: new Set(),
 };
 
-function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boolean): number {
+function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boolean, weather: Weather): number {
   return (
     f.types.size +
     (f.minSpe !== '' ? 1 : 0) +
@@ -163,16 +180,19 @@ function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boole
     (f.defaultOnly ? 1 : 0) +
     (f.excludedFlags.size > 0 ? 1 : 0) +
     (showPossible ? 1 : 0) +
-    (minAccuracy > 0 ? 1 : 0)
+    (minAccuracy > 0 ? 1 : 0) +
+    (weather !== 'none' ? 1 : 0)
   );
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export default function PokemonResultsView({ results, targetNames, targetSpeeds, mustOutspeedSpeeds, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange }: Props) {
+export default function PokemonResultsView({ results, targetNames, targetSpeeds, mustOutspeedSpeeds, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [sortKey, setSortKey] = useState<SortKey>('bst');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const toggle = (id: number) =>
     setExpandedIds(prev => {
@@ -230,10 +250,35 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
     });
   }, [results, filters, targetSpeeds, mustOutspeedSpeeds, championsOnly]);
 
-  const expandAll = () => setExpandedIds(new Set(filteredResults.map(r => r.pokemon.id)));
+  const sortedResults = useMemo(() => {
+    const arr = [...filteredResults];
+    arr.sort((a, b) => {
+      const bst = (p: typeof a.pokemon) =>
+        p.stats.hp + p.stats.atk + p.stats.def + p.stats.spa + p.stats.spd + p.stats.spe;
+      let av: number | string;
+      let bv: number | string;
+      switch (sortKey) {
+        case 'bst':  av = bst(a.pokemon);        bv = bst(b.pokemon);        break;
+        case 'name': av = a.pokemon.name;         bv = b.pokemon.name;        break;
+        case 'atk':  av = a.pokemon.stats.atk;   bv = b.pokemon.stats.atk;   break;
+        case 'spa':  av = a.pokemon.stats.spa;   bv = b.pokemon.stats.spa;   break;
+        case 'spe':  av = a.pokemon.stats.spe;   bv = b.pokemon.stats.spe;   break;
+        case 'def':  av = a.pokemon.stats.def;   bv = b.pokemon.stats.def;   break;
+        case 'spd':  av = a.pokemon.stats.spd;   bv = b.pokemon.stats.spd;   break;
+        case 'hp':   av = a.pokemon.stats.hp;    bv = b.pokemon.stats.hp;    break;
+      }
+      const cmp = typeof av === 'string'
+        ? av.localeCompare(bv as string)
+        : (av as number) - (bv as number);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [filteredResults, sortKey, sortDir]);
+
+  const expandAll = () => setExpandedIds(new Set(sortedResults.map(r => r.pokemon.id)));
   const collapseAll = () => setExpandedIds(new Set());
 
-  const activeFilterCount = countActiveFilters(filters, minAccuracy, showPossible);
+  const activeFilterCount = countActiveFilters(filters, minAccuracy, showPossible, weather);
 
   const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) =>
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -258,8 +303,8 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
     );
   }
 
-  const guaranteed = filteredResults.filter(r => r.allGuaranteed);
-  const possible = filteredResults.filter(r => !r.allGuaranteed);
+  const guaranteed = sortedResults.filter(r => r.allGuaranteed);
+  const possible = sortedResults.filter(r => !r.allGuaranteed);
 
   return (
     <div>
@@ -273,7 +318,44 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
           )}
           .
         </p>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Sort controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sort</span>
+            <select
+              value={sortKey}
+              onChange={e => setSortKey(e.target.value as SortKey)}
+              style={{
+                fontSize: '12px', padding: '4px 6px', border: '1px solid #ddd',
+                borderRadius: '6px', background: '#fff', color: '#555', cursor: 'pointer',
+              }}
+            >
+              {SORT_OPTIONS.map(o => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+              title={sortDir === 'asc' ? 'Ascending — click to switch to descending' : 'Descending — click to switch to ascending'}
+              style={{
+                ...btnStyle, padding: '4px 8px', fontWeight: 700, fontSize: '13px',
+                color: '#555', minWidth: '32px', textAlign: 'center',
+              }}
+            >
+              {sortDir === 'asc' ? '↑' : '↓'}
+            </button>
+          </div>
+
+          <div style={{ width: '1px', height: '20px', background: '#e2e8f0', alignSelf: 'center' }} />
+
+          {activeFilterCount > 0 && (
+            <button
+              onClick={() => { setFilters(EMPTY_FILTERS); onMinAccuracyChange(0); onShowPossibleChange(false); onWeatherChange('none'); }}
+              style={{ ...btnStyle, color: '#e53e3e', borderColor: '#e53e3e' }}
+            >
+              ✕ Clear filters
+            </button>
+          )}
           <button
             onClick={() => setFiltersOpen(v => !v)}
             style={{
@@ -401,6 +483,36 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
             </div>
 
             <div>
+              <div style={filterLabel}>Weather</div>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                {(['none', 'sun', 'rain', 'sand', 'snow'] as Weather[]).map(w => {
+                  const info = w !== 'none' ? WEATHER_INFO[w] : null;
+                  const active = weather === w;
+                  return (
+                    <Tooltip
+                      key={w}
+                      content={info ? `${info.icon} ${info.label}: ${info.description}` : 'No weather — standard conditions'}
+                      side="bottom"
+                    >
+                      <button
+                        onClick={() => onWeatherChange(w)}
+                        style={{
+                          ...toggleBtnStyle,
+                          background: active ? (info?.bg ?? '#e53e3e') : '#fff',
+                          color: active ? (info?.color ?? '#fff') : '#555',
+                          borderColor: active ? (info?.color ?? '#e53e3e') : '#ddd',
+                          fontWeight: active ? 700 : 500,
+                        }}
+                      >
+                        {info ? `${info.icon} ${info.label}` : 'None'}
+                      </button>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
               <div style={filterLabel}>Min. Accuracy</div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
                 {([
@@ -493,7 +605,7 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
           {activeFilterCount > 0 && (
             <div>
               <button
-                onClick={() => { setFilters(EMPTY_FILTERS); onMinAccuracyChange(0); onShowPossibleChange(false); }}
+                onClick={() => { setFilters(EMPTY_FILTERS); onMinAccuracyChange(0); onShowPossibleChange(false); onWeatherChange('none'); }}
                 style={{ ...btnStyle, color: '#e53e3e', borderColor: '#e53e3e' }}
               >
                 Clear all filters
@@ -504,14 +616,14 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
       )}
 
       {/* ── Results list ── */}
-      {filteredResults.length === 0 && activeFilterCount > 0 && (
+      {sortedResults.length === 0 && activeFilterCount > 0 && (
         <div style={{ textAlign: 'center', color: '#aaa', padding: '32px', fontSize: '15px' }}>
           No results match the current filters.
         </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {filteredResults.map(result => {
+        {sortedResults.map(result => {
           const { pokemon, movesPerTarget, allGuaranteed } = result;
           const isExpanded = expandedIds.has(pokemon.id);
           const typeNames = pokemon.typeIds.map(tid => data.typeNames.get(tid) ?? '?');
@@ -571,16 +683,17 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                     </span>
                   </Tooltip>
 
+                  <StatChip label="BST" value={
+                    pokemon.stats.hp + pokemon.stats.atk + pokemon.stats.def +
+                    pokemon.stats.spa + pokemon.stats.spd + pokemon.stats.spe
+                  } />
+
                   <div style={{ display: 'flex', gap: '3px' }}>
                     {typeNames.map(t => <TypeBadge key={t} typeName={t} />)}
                   </div>
 
                   <StatChip label="Atk" value={pokemon.stats.atk} />
                   <StatChip label="SpA" value={pokemon.stats.spa} />
-                  <StatChip label="BST" value={
-                    pokemon.stats.hp + pokemon.stats.atk + pokemon.stats.def +
-                    pokemon.stats.spa + pokemon.stats.spd + pokemon.stats.spe
-                  } />
 
                   {/* Speed chip */}
                   <Tooltip
@@ -649,49 +762,50 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                     </span>
                   </Tooltip>
 
-                  {/* Ability chips — far right */}
-                  {pokemon.abilities.length > 0 && (
-                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      {pokemon.abilities.map(ability => (
-                        <Tooltip
-                          key={ability.name}
-                          content={
-                            <div>
-                              <div style={{ fontWeight: 700, marginBottom: '4px' }}>
-                                {ability.name}
-                                {ability.isHidden && (
-                                  <span style={{ marginLeft: '6px', fontSize: '10px', color: '#a78bfa', fontWeight: 600 }}>Hidden</span>
-                                )}
-                              </div>
-                              {ability.description
-                                ? <div style={{ color: '#ccc' }}>{ability.description}</div>
-                                : <div style={{ color: '#777', fontStyle: 'italic' }}>No description available</div>
-                              }
-                            </div>
-                          }
-                          maxWidth={240}
-                        >
-                          <span style={{
-                            background: ability.isHidden ? '#f3f0ff' : '#f0f0f0',
-                            border: `1px solid ${ability.isHidden ? '#c4b5fd' : '#e0e0e0'}`,
-                            color: ability.isHidden ? '#6d28d9' : '#444',
-                            borderRadius: '5px',
-                            padding: '1px 7px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            cursor: 'help',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {ability.name}
-                          </span>
-                        </Tooltip>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
-                {/* Row 2: move counts + status badge */}
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                {/* Row 2: ability chips (left) + move counts + status badge (right) */}
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  {/* Ability chips — left side */}
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                    {pokemon.abilities.map(ability => (
+                      <Tooltip
+                        key={ability.name}
+                        content={
+                          <div>
+                            <div style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {ability.name}
+                              {ability.isHidden && (
+                                <span style={{ fontSize: '10px', color: '#a78bfa', fontWeight: 600 }}>Hidden</span>
+                              )}
+                            </div>
+                            {ability.description
+                              ? <div style={{ color: '#ccc' }}>{ability.description}</div>
+                              : <div style={{ color: '#777', fontStyle: 'italic' }}>No description available</div>
+                            }
+                          </div>
+                        }
+                        maxWidth={260}
+                      >
+                        <span style={{
+                          background: ability.isHidden ? '#f3f0ff' : '#f0f0f0',
+                          border: `1px solid ${ability.isHidden ? '#c4b5fd' : '#e0e0e0'}`,
+                          color: ability.isHidden ? '#6d28d9' : '#444',
+                          borderRadius: '5px',
+                          padding: '1px 7px',
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          cursor: 'help',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {ability.name}
+                        </span>
+                      </Tooltip>
+                    ))}
+                  </div>
+
+                  {/* Move counts + status badge — right side */}
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {moveCounts.map((mc, i) => (
                     <div key={i} style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '10px', color: '#aaa', textTransform: 'uppercase' }}>
@@ -705,6 +819,7 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                     </div>
                   ))}
                   <StatusBadge allGuaranteed={allGuaranteed} />
+                  </div>
                 </div>
               </div>
 
@@ -820,6 +935,43 @@ function MoveTable({ moves, data, totalTargets, targetNames }: {
                     </span>
                   </Tooltip>
                 ))}
+                {/* Weather chip — shown when weather was required for this OHKO */}
+                {m.weatherRequired && (() => {
+                  const wi = WEATHER_INFO[m.weatherRequired];
+                  return (
+                    <Tooltip
+                      content={`${wi.icon} ${wi.label} required — ${wi.description}`}
+                      side="bottom"
+                    >
+                      <span style={{
+                        marginLeft: '4px', fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: wi.bg, color: wi.color,
+                        border: `1px solid ${wi.color}`,
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {wi.icon} {wi.label}
+                      </span>
+                    </Tooltip>
+                  );
+                })()}
+                {/* Ability chip — shown when an ability modifier is factored into this move's damage */}
+                {m.abilityMod && (
+                  <Tooltip
+                    content={`${m.abilityMod.name} is required to achieve this OHKO${m.abilityMod.isHidden ? ' (Hidden Ability)' : ''}`}
+                    side="bottom"
+                  >
+                    <span style={{
+                      marginLeft: '4px', fontSize: '10px', fontWeight: 700, cursor: 'help',
+                      background: '#fffbeb', color: '#92400e',
+                      border: '1px solid #f6ad55',
+                      borderRadius: '3px', padding: '1px 5px',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      ★ {m.abilityMod.name}
+                    </span>
+                  </Tooltip>
+                )}
                 {totalTargets > 1 && m.coveredTargetIndices.length > 1 && (
                   <Tooltip
                     content={

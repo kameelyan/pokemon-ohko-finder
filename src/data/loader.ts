@@ -158,7 +158,12 @@ export async function loadGameData(): Promise<GameData> {
         spd: rawStats[5] ?? 0,
         spe: rawStats[6] ?? 0,
       },
-      abilities: pokemonAbilitiesJson[id] ?? [],
+      abilities: (pokemonAbilitiesJson[id] ?? []).map((a: PokemonAbility) => ({
+        identifier: a.identifier ?? '',
+        name: a.name,
+        description: a.description,
+        isHidden: a.isHidden,
+      })),
     });
   }
 
@@ -191,6 +196,8 @@ export async function loadGameData(): Promise<GameData> {
       description: moveDescriptions[id] ?? '',
       priority: Number(row.priority) || 0,
       flags: moveFlagsJson[String(id)] ?? [],
+      effectChance: row.effect_chance !== '' && row.effect_chance !== undefined
+        ? Number(row.effect_chance) : null,
     });
   }
 

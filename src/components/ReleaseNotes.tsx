@@ -5,6 +5,47 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.3.0',
+    date: 'May 2026',
+    title: 'Ability Modifiers, Weather, Sorting & UI Polish',
+    sections: [
+      {
+        heading: '⚡ Ability Modifiers',
+        items: [
+          'Damage calculations now account for 14 damage-boosting abilities: Technician, Iron Fist, Strong Jaw, Mega Launcher, Tough Claws, Punk Rock, Sheer Force, Adaptability, Steelworker, Transistor, Dragon\'s Maw, Hustle, and the Normalise family (Pixilate, Refrigerate, Aerilate, Galvanize).',
+          'When an ability is required to achieve the OHKO, an amber "★ AbilityName" chip appears on the move row — hover it to see the exact ability and whether it\'s a Hidden Ability.',
+        ],
+      },
+      {
+        heading: '🌤 Weather',
+        items: [
+          'Weather conditions — Sun, Rain, Sand, and Snow — are now factored into damage calculations.',
+          'Sun boosts Fire-type moves by ×1.5; Rain boosts Water-type moves by ×1.5. Solar Power activates under Sun, and Sand Force activates under Sand for Rock, Ground, and Steel moves.',
+          'A weather chip (e.g. ☀️ Sun) appears on a move row when that weather is required for the OHKO.',
+          'A Weather selector has been added to the Filters panel. Set the current weather to see how it affects which Pokémon can land the KO.',
+          'A "✕ Clear filters" button appears to the left of the Filters dropdown whenever any filters are active, for quick one-click reset.',
+        ],
+      },
+      {
+        heading: '🔢 Sorting',
+        items: [
+          'Results can now be sorted by Base Stat Total, Name, Speed, Attack, Sp. Attack, Defense, Sp. Defense, or HP.',
+          'Toggle between ascending (↑) and descending (↓) order with the direction button next to the sort dropdown.',
+          'Defaults to Base Stat Total descending — strongest Pokémon first.',
+        ],
+      },
+      {
+        heading: '🎛 UI Polish',
+        items: [
+          'Expanded result rows no longer collapse when filters are added or removed.',
+          'The BST chip has moved to the far left of each result row for quicker scanning.',
+          'Ability chips have moved to the second row of each result card, on the left side.',
+          'Move category icons are now properly centred in their table column.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.2.0',
     date: 'May 2026',
     title: 'Move Flags, Target Items & Accuracy Fix',

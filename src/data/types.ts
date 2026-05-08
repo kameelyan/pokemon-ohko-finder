@@ -1,4 +1,5 @@
 export interface PokemonAbility {
+  identifier: string;
   name: string;
   description: string;
   isHidden: boolean;
@@ -35,6 +36,7 @@ export interface Move {
   description: string;
   priority: number;       // 0 = normal, +1/+2 = fast priority, negative = slow
   flags: MoveFlag[];
+  effectChance: number | null; // chance of secondary effect (> 0 = Sheer Force applicable)
 }
 
 export interface PokemonMoveEntry {

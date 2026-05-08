@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { loadGameData } from './data/loader';
 import type { GameData, Pokemon } from './data/types';
 import { findPokemonOHKOs, calcHP, calcStat, TARGET_HELD_ITEMS } from './calc/damage';
-import type { PokemonOHKOResult, EVSpread, TargetConfig, TargetHeldItem } from './calc/damage';
+import type { PokemonOHKOResult, EVSpread, TargetConfig, TargetHeldItem, Weather } from './calc/damage';
 import PokemonSearch from './components/PokemonSearch';
 import PokemonResultsView from './components/PokemonResultsView';
 import ReleaseNotes from './components/ReleaseNotes';
@@ -50,6 +50,7 @@ export default function App() {
   const [computing, setComputing] = useState(false);
   const [showPossible, setShowPossible] = useState(false);
   const [minAccuracy, setMinAccuracy] = useState(0);
+  const [weather, setWeather] = useState<Weather>('none');
 
   useEffect(() => {
     loadGameData()
@@ -126,11 +127,11 @@ export default function App() {
     if (!data || activeTargets.length === 0) { setResults([]); return; }
     setComputing(true);
     setTimeout(() => {
-      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy));
+      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather));
       setComputing(false);
     }, 10);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, slots, showPossible, minAccuracy]);
+  }, [data, slots, showPossible, minAccuracy, weather]);
 
   /* ── slot helpers ── */
   const updateSlot = (id: number, patch: Partial<TargetSlot>) =>
@@ -340,20 +341,20 @@ export default function App() {
                 <h2 style={{ margin: '0 0 16px', fontSize: '18px' }}>
                   {computing ? '⏳ Computing…' : resultLabel}
                 </h2>
-                {!computing && (
-                  <PokemonResultsView
-                    results={results}
-                    targetNames={filledNames}
-                    targetSpeeds={targetSpeeds}
-                    mustOutspeedSpeeds={mustOutspeedSpeeds}
-                    championsOnly={championsOnly}
-                    data={data!}
-                    showPossible={showPossible}
-                    onShowPossibleChange={setShowPossible}
-                    minAccuracy={minAccuracy}
-                    onMinAccuracyChange={setMinAccuracy}
-                  />
-                )}
+                <PokemonResultsView
+                  results={results}
+                  targetNames={filledNames}
+                  targetSpeeds={targetSpeeds}
+                  mustOutspeedSpeeds={mustOutspeedSpeeds}
+                  championsOnly={championsOnly}
+                  data={data!}
+                  showPossible={showPossible}
+                  onShowPossibleChange={setShowPossible}
+                  minAccuracy={minAccuracy}
+                  onMinAccuracyChange={setMinAccuracy}
+                  weather={weather}
+                  onWeatherChange={setWeather}
+                />
               </div>
             )}
 
