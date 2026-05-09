@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { loadGameData } from './data/loader';
 import type { GameData, Pokemon } from './data/types';
 import { findPokemonOHKOs, calcHP, calcStat, TARGET_HELD_ITEMS } from './calc/damage';
-import type { PokemonOHKOResult, EVSpread, TargetConfig, TargetHeldItem, Weather } from './calc/damage';
+import type { PokemonOHKOResult, EVSpread, TargetConfig, TargetHeldItem, Weather, Terrain } from './calc/damage';
 import PokemonSearch from './components/PokemonSearch';
 import PokemonResultsView from './components/PokemonResultsView';
 import ReleaseNotes from './components/ReleaseNotes';
@@ -11,6 +11,84 @@ import Tooltip from './components/Tooltip';
 import { APP_VERSION } from './version';
 
 const DEFAULT_EVS: EVSpread = { hp: 0, def: 0, spd: 0, spe: 0 };
+
+// ── Natures ──────────────────────────────────────────────────────────────────
+
+type StatKey = 'atk' | 'def' | 'spa' | 'spd' | 'spe';
+interface NatureData {
+  name: string;
+  plus: StatKey | null;
+  minus: StatKey | null;
+}
+const STAT_LABELS: Record<StatKey, string> = {
+  atk: 'Attack', def: 'Defense', spa: 'Sp. Atk', spd: 'Sp. Def', spe: 'Speed',
+};
+const NATURE_GROUPS: { label: string; natures: NatureData[] }[] = [
+  {
+    label: '+ Defense',
+    natures: [
+      { name: 'Bold',    plus: 'def', minus: 'atk' },
+      { name: 'Impish',  plus: 'def', minus: 'spa' },
+      { name: 'Relaxed', plus: 'def', minus: 'spe' },
+      { name: 'Lax',     plus: 'def', minus: 'spd' },
+    ],
+  },
+  {
+    label: '+ Sp. Defense',
+    natures: [
+      { name: 'Calm',    plus: 'spd', minus: 'atk' },
+      { name: 'Careful', plus: 'spd', minus: 'spa' },
+      { name: 'Gentle',  plus: 'spd', minus: 'def' },
+      { name: 'Sassy',   plus: 'spd', minus: 'spe' },
+    ],
+  },
+  {
+    label: '+ Speed',
+    natures: [
+      { name: 'Timid',   plus: 'spe', minus: 'atk' },
+      { name: 'Jolly',   plus: 'spe', minus: 'spa' },
+      { name: 'Hasty',   plus: 'spe', minus: 'def' },
+      { name: 'Naive',   plus: 'spe', minus: 'spd' },
+    ],
+  },
+  {
+    label: '− Defense',
+    natures: [
+      { name: 'Lonely',  plus: 'atk', minus: 'def' },
+      { name: 'Mild',    plus: 'spa', minus: 'def' },
+    ],
+  },
+  {
+    label: '− Sp. Defense',
+    natures: [
+      { name: 'Naughty', plus: 'atk', minus: 'spd' },
+      { name: 'Rash',    plus: 'spa', minus: 'spd' },
+    ],
+  },
+  {
+    label: '− Speed',
+    natures: [
+      { name: 'Brave',   plus: 'atk', minus: 'spe' },
+      { name: 'Quiet',   plus: 'spa', minus: 'spe' },
+    ],
+  },
+  {
+    label: 'No effect on Def/SpD/Spe',
+    natures: [
+      { name: 'Modest',  plus: 'spa', minus: 'atk' },
+      { name: 'Adamant', plus: 'atk', minus: 'spa' },
+    ],
+  },
+];
+const ALL_NATURES = NATURE_GROUPS.flatMap(g => g.natures);
+
+function getNatureMult(nature: string, stat: StatKey): number {
+  const n = ALL_NATURES.find(n => n.name === nature);
+  if (!n) return 1.0;
+  if (n.plus === stat)  return 1.1;
+  if (n.minus === stat) return 0.9;
+  return 1.0;
+}
 const MAX_TARGETS = 6;
 const STORAGE_KEY = 'ohko-finder-slots';
 
@@ -22,6 +100,9 @@ interface TargetSlot {
   heldItem: TargetHeldItem | null;
   reflect: boolean;
   lightScreen: boolean;
+  nature: string; // nature name, or 'Neutral'
+  tailwind: boolean;
+  friendGuard: boolean;
 }
 
 /** Shape written to / read from localStorage (no full Pokemon object). */
@@ -32,11 +113,14 @@ interface SavedSlot {
   heldItemIdentifier?: string;
   reflect?: boolean;
   lightScreen?: boolean;
+  nature?: string;
+  tailwind?: boolean;
+  friendGuard?: boolean;
 }
 
 let nextId = 1;
 function makeSlot(): TargetSlot {
-  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false, heldItem: null, reflect: false, lightScreen: false };
+  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false, heldItem: null, reflect: false, lightScreen: false, nature: 'Neutral', tailwind: false, friendGuard: false };
 }
 
 export default function App() {
@@ -51,6 +135,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'finder' | 'notes'>('finder');
   const [championsOnly, setChampionsOnly] = useState(true);
   const [isDoubles, setIsDoubles] = useState(true);
+  const [gravity, setGravity] = useState(false);
+  const [terrain, setTerrain] = useState<Terrain>('none');
+  const [fairyAura, setFairyAura] = useState(false);
   const [results, setResults] = useState<PokemonOHKOResult[]>([]);
   const [computing, setComputing] = useState(false);
   const [showPossible, setShowPossible] = useState(false);
@@ -79,6 +166,9 @@ export default function App() {
             heldItem: TARGET_HELD_ITEMS.find(i => i.identifier === s.heldItemIdentifier) ?? null,
             reflect: s.reflect ?? false,
             lightScreen: s.lightScreen ?? false,
+            nature: s.nature ?? 'Neutral',
+            tailwind: s.tailwind ?? false,
+            friendGuard: s.friendGuard ?? false,
           }));
           restoredRef.current = true; // open gate before setSlots so the next save is correct
           setSlots(restored);
@@ -99,6 +189,9 @@ export default function App() {
       heldItemIdentifier: s.heldItem?.identifier,
       reflect: s.reflect,
       lightScreen: s.lightScreen,
+      nature: s.nature,
+      tailwind: s.tailwind,
+      friendGuard: s.friendGuard,
     }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   }, [slots]);
@@ -122,25 +215,43 @@ export default function App() {
   // Slots with a selected Pokémon
   const activeTargets: TargetConfig[] = slots
     .filter(s => s.pokemon !== null)
-    .map(s => ({ pokemon: s.pokemon!, evs: s.evs, heldItem: s.heldItem ?? undefined, reflect: s.reflect, lightScreen: s.lightScreen }));
+    .map(s => ({
+      pokemon: s.pokemon!,
+      evs: s.evs,
+      heldItem: s.heldItem ?? undefined,
+      reflect: s.reflect,
+      lightScreen: s.lightScreen,
+      defNature: getNatureMult(s.nature, 'def'),
+      spdNature: getNatureMult(s.nature, 'spd'),
+      speNature: getNatureMult(s.nature, 'spe'),
+      friendGuard: isDoubles ? s.friendGuard : false,
+    }));
 
-  // EV-invested L50 speed for each active target
-  const targetSpeeds: number[] = activeTargets.map(t => calcStat(t.pokemon.stats.spe, t.evs.spe));
+  // EV-invested, nature-adjusted L50 speed for each active target (×2 under Tailwind)
+  const targetSpeeds: number[] = slots
+    .filter(s => s.pokemon !== null)
+    .map(s => {
+      const base = calcStat(s.pokemon!.stats.spe, s.evs.spe, 31, 50, getNatureMult(s.nature, 'spe'));
+      return s.tailwind ? base * 2 : base;
+    });
 
-  // Speeds of targets with mustOutspeed checked (passed to results view for filtering)
+  // Speeds of targets with mustOutspeed checked (also Tailwind-aware)
   const mustOutspeedSpeeds: number[] = slots
     .filter(s => s.pokemon !== null && s.mustOutspeed)
-    .map(s => calcStat(s.pokemon!.stats.spe, s.evs.spe));
+    .map(s => {
+      const base = calcStat(s.pokemon!.stats.spe, s.evs.spe, 31, 50, getNatureMult(s.nature, 'spe'));
+      return s.tailwind ? base * 2 : base;
+    });
 
   useEffect(() => {
     if (!data || activeTargets.length === 0) { setResults([]); return; }
     setComputing(true);
     setTimeout(() => {
-      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather, isDoubles));
+      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura));
       setComputing(false);
     }, 10);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, slots, showPossible, minAccuracy, weather, isDoubles]);
+  }, [data, slots, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura]);
 
   /* ── slot helpers ── */
   const updateSlot = (id: number, patch: Partial<TargetSlot>) =>
@@ -381,7 +492,7 @@ export default function App() {
               {/* Target grid */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
                 gap: '20px',
                 marginBottom: '20px',
               }}>
@@ -396,6 +507,7 @@ export default function App() {
                     heldItem={slot.heldItem}
                     reflect={slot.reflect}
                     lightScreen={slot.lightScreen}
+                    nature={slot.nature}
                     onSelect={p => updateSlot(slot.id, { pokemon: p, evs: { ...DEFAULT_EVS } })}
                     onRemove={slots.length > 1 ? () => removeSlot(slot.id) : undefined}
                     onEvsChange={evs => updateSlot(slot.id, { evs })}
@@ -403,6 +515,12 @@ export default function App() {
                     onHeldItemChange={item => updateSlot(slot.id, { heldItem: item })}
                     onReflectChange={v => updateSlot(slot.id, { reflect: v })}
                     onLightScreenChange={v => updateSlot(slot.id, { lightScreen: v })}
+                    onNatureChange={n => updateSlot(slot.id, { nature: n })}
+                    tailwind={slot.tailwind}
+                    onTailwindChange={v => updateSlot(slot.id, { tailwind: v })}
+                    friendGuard={slot.friendGuard}
+                    onFriendGuardChange={v => updateSlot(slot.id, { friendGuard: v })}
+                    isDoubles={isDoubles}
                     data={data!}
                   />
                 ))}
@@ -450,10 +568,8 @@ export default function App() {
                 background: '#fff', borderRadius: '12px', padding: '24px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
               }}>
-                <h2 style={{ margin: '0 0 16px', fontSize: '18px' }}>
-                  {computing ? '⏳ Computing…' : resultLabel}
-                </h2>
                 <PokemonResultsView
+                  title={computing ? '⏳ Computing…' : resultLabel}
                   results={results}
                   targetNames={filledNames}
                   targetSpeeds={targetSpeeds}
@@ -466,6 +582,12 @@ export default function App() {
                   onMinAccuracyChange={setMinAccuracy}
                   weather={weather}
                   onWeatherChange={setWeather}
+                  gravity={gravity}
+                  onGravityChange={setGravity}
+                  terrain={terrain}
+                  onTerrainChange={setTerrain}
+                  fairyAura={fairyAura}
+                  onFairyAuraChange={setFairyAura}
                   isDoubles={isDoubles}
                 />
               </div>
@@ -519,7 +641,7 @@ const HELD_ITEM_GROUPS: { label: string; items: typeof TARGET_HELD_ITEMS }[] = [
   },
 ];
 
-function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, reflect, lightScreen, onSelect, onRemove, onEvsChange, onMustOutspeedChange, onHeldItemChange, onReflectChange, onLightScreenChange, data }: {
+function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, reflect, lightScreen, nature, tailwind, onTailwindChange, friendGuard, onFriendGuardChange, isDoubles, onSelect, onRemove, onEvsChange, onMustOutspeedChange, onHeldItemChange, onReflectChange, onLightScreenChange, onNatureChange, data }: {
   label: string;
   pokemon: Pokemon[];
   selected: Pokemon | null;
@@ -528,6 +650,12 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
   heldItem: TargetHeldItem | null;
   reflect: boolean;
   lightScreen: boolean;
+  nature: string;
+  tailwind: boolean;
+  onTailwindChange: (v: boolean) => void;
+  friendGuard: boolean;
+  onFriendGuardChange: (v: boolean) => void;
+  isDoubles: boolean;
   onSelect: (p: Pokemon) => void;
   onRemove?: () => void;
   onEvsChange: (evs: EVSpread) => void;
@@ -535,12 +663,14 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
   onHeldItemChange: (item: TargetHeldItem | null) => void;
   onReflectChange: (v: boolean) => void;
   onLightScreenChange: (v: boolean) => void;
+  onNatureChange: (n: string) => void;
   data: GameData;
 }) {
   const hp  = selected ? calcHP(selected.stats.hp, evs.hp) : 0;
-  const def = selected ? calcStat(selected.stats.def, evs.def) : 0;
-  const spd = selected ? calcStat(selected.stats.spd, evs.spd) : 0;
-  const spe = selected ? calcStat(selected.stats.spe, evs.spe) : 0;
+  const def = selected ? calcStat(selected.stats.def, evs.def, 31, 50, getNatureMult(nature, 'def')) : 0;
+  const spd = selected ? calcStat(selected.stats.spd, evs.spd, 31, 50, getNatureMult(nature, 'spd')) : 0;
+  const baseSpe = selected ? calcStat(selected.stats.spe, evs.spe, 31, 50, getNatureMult(nature, 'spe')) : 0;
+  const spe = tailwind ? baseSpe * 2 : baseSpe;
 
   return (
     <div style={{
@@ -589,22 +719,206 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px', fontSize: '11px' }}>
-            <StatPill label="HP" base={selected.stats.hp} computed={hp} />
-            <StatPill label="Def" base={selected.stats.def} computed={def} />
-            <StatPill label="SpD" base={selected.stats.spd} computed={spd} />
-            <StatPill label="Spe" base={selected.stats.spe} computed={spe} />
+          <div style={{ display: 'flex', columnGap: '6px', rowGap: '10px', flexWrap: 'wrap', marginBottom: '8px', fontSize: '11px' }}>
+            <StatPill label="HP" base={selected.stats.hp} computed={hp} tooltip={
+              <div>
+                <div style={{ fontWeight: 700, marginBottom: '5px' }}>HP Stat at Lv. 50</div>
+                <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Base: {selected.stats.hp} · EVs: {evs.hp} · IVs: 31</div>
+                <div style={{ color: '#68d391', fontWeight: 700 }}>→ {hp} HP</div>
+              </div>
+            } />
+            {(() => {
+              const defNatMult = getNatureMult(nature, 'def');
+              const defNatLabel = defNatMult === 1.1 ? '+10% (boosted)' : defNatMult === 0.9 ? '−10% (reduced)' : 'neutral';
+              return (
+                <StatPill label="Def" base={selected.stats.def} computed={def} tooltip={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: '5px' }}>Defense Stat at Lv. 50</div>
+                    <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.def} · EVs: {evs.def} · IVs: 31</div>
+                    <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {defNatLabel}</div>
+                    <div style={{ color: '#68d391', fontWeight: 700 }}>→ {def} Defense</div>
+                  </div>
+                } />
+              );
+            })()}
+            {(() => {
+              const spdNatMult = getNatureMult(nature, 'spd');
+              const spdNatLabel = spdNatMult === 1.1 ? '+10% (boosted)' : spdNatMult === 0.9 ? '−10% (reduced)' : 'neutral';
+              return (
+                <StatPill label="SpD" base={selected.stats.spd} computed={spd} tooltip={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: '5px' }}>Sp. Defense Stat at Lv. 50</div>
+                    <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.spd} · EVs: {evs.spd} · IVs: 31</div>
+                    <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {spdNatLabel}</div>
+                    <div style={{ color: '#68d391', fontWeight: 700 }}>→ {spd} Sp. Defense</div>
+                  </div>
+                } />
+              );
+            })()}
+            {(() => {
+              const speNatMult = getNatureMult(nature, 'spe');
+              const speNatLabel = speNatMult === 1.1 ? '+10% (boosted)' : speNatMult === 0.9 ? '−10% (reduced)' : 'neutral';
+              return (
+                <StatPill label="Spe" base={selected.stats.spe} computed={spe} tooltip={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: '5px' }}>Speed Stat at Lv. 50</div>
+                    <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.spe} · EVs: {evs.spe} · IVs: 31</div>
+                    <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Nature: {speNatLabel}</div>
+                    {tailwind ? (
+                      <>
+                        <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Tailwind: ×2</div>
+                        <div style={{ color: '#68d391', fontWeight: 700 }}>→ {baseSpe} Speed · ×2 = {spe} effective</div>
+                      </>
+                    ) : (
+                      <div style={{ color: '#68d391', fontWeight: 700 }}>→ {spe} Speed</div>
+                    )}
+                  </div>
+                } />
+              );
+            })()}
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
             <EVInput label="HP EVs"  value={evs.hp}  onChange={v => onEvsChange({ ...evs, hp: v })} />
             <EVInput label="Def EVs" value={evs.def} onChange={v => onEvsChange({ ...evs, def: v })} />
             <EVInput label="SpD EVs" value={evs.spd} onChange={v => onEvsChange({ ...evs, spd: v })} />
             <EVInput label="Spe EVs" value={evs.spe} onChange={v => onEvsChange({ ...evs, spe: v })} />
           </div>
 
-          {/* Held item */}
+          {/* Nature */}
           <div style={{ marginTop: '10px' }}>
+            <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Nature
+            </div>
+            <select
+              value={nature}
+              onChange={e => onNatureChange(e.target.value)}
+              style={{
+                width: '100%', padding: '4px 6px', border: '1px solid #ddd',
+                borderRadius: '5px', fontSize: '12px', background: '#fff',
+                color: nature === 'Neutral' ? '#aaa' : '#333', cursor: 'pointer',
+              }}
+            >
+              <option value="Neutral">Neutral (Hardy / Docile / Serious / Bashful / Quirky)</option>
+              {NATURE_GROUPS.map(group => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.natures.map(n => (
+                    <option key={n.name} value={n.name}>
+                      {n.name}{n.plus && n.minus ? ` (+${STAT_LABELS[n.plus]}, −${STAT_LABELS[n.minus]})` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            marginTop: '10px', cursor: 'pointer', fontSize: '12px',
+            color: mustOutspeed ? '#2b6cb0' : '#666',
+            fontWeight: mustOutspeed ? 700 : 400,
+          }}>
+            <input
+              type="checkbox"
+              checked={mustOutspeed}
+              onChange={e => onMustOutspeedChange(e.target.checked)}
+            />
+            Must outspeed {selected.name}
+          </label>
+
+          {/* ── Additional Settings (collapsible) ── */}
+          <AdditionalSettings
+            heldItem={heldItem}
+            onHeldItemChange={onHeldItemChange}
+            reflect={reflect}
+            onReflectChange={onReflectChange}
+            lightScreen={lightScreen}
+            onLightScreenChange={onLightScreenChange}
+            tailwind={tailwind}
+            onTailwindChange={onTailwindChange}
+            friendGuard={friendGuard}
+            onFriendGuardChange={onFriendGuardChange}
+            isDoubles={isDoubles}
+            data={data}
+            selected={selected}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdditionalSettings({
+  heldItem, onHeldItemChange,
+  reflect, onReflectChange,
+  lightScreen, onLightScreenChange,
+  tailwind, onTailwindChange,
+  friendGuard, onFriendGuardChange,
+  isDoubles, data, selected,
+}: {
+  heldItem: TargetHeldItem | null;
+  onHeldItemChange: (item: TargetHeldItem | null) => void;
+  reflect: boolean;
+  onReflectChange: (v: boolean) => void;
+  lightScreen: boolean;
+  onLightScreenChange: (v: boolean) => void;
+  tailwind: boolean;
+  onTailwindChange: (v: boolean) => void;
+  friendGuard: boolean;
+  onFriendGuardChange: (v: boolean) => void;
+  isDoubles: boolean;
+  data: GameData;
+  selected: Pokemon;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const activeCount =
+    (heldItem ? 1 : 0) +
+    (reflect ? 1 : 0) +
+    (lightScreen ? 1 : 0) +
+    (tailwind ? 1 : 0) +
+    (friendGuard && isDoubles ? 1 : 0);
+
+  return (
+    <div style={{ marginTop: '10px' }}>
+      {/* Header / toggle */}
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: open ? '#f0f7ff' : '#f7f7f7',
+          border: `1px solid ${open ? '#90cdf4' : '#e2e8f0'}`,
+          borderRadius: open ? '6px 6px 0 0' : '6px',
+          padding: '5px 10px', cursor: 'pointer',
+          transition: 'all 0.15s',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: open ? '#2b6cb0' : '#888' }}>
+            Additional Modifiers
+          </span>
+          {activeCount > 0 && (
+            <span style={{
+              background: '#2b6cb0', color: '#fff',
+              borderRadius: '999px', fontSize: '10px', fontWeight: 700,
+              padding: '1px 6px', lineHeight: 1.4,
+            }}>{activeCount}</span>
+          )}
+        </div>
+        <span style={{ fontSize: '10px', color: '#aaa', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', display: 'inline-block' }}>▶</span>
+      </button>
+
+      {/* Collapsible body */}
+      {open && (
+        <div style={{
+          border: '1px solid #90cdf4', borderTop: 'none',
+          borderRadius: '0 0 6px 6px',
+          padding: '10px',
+          background: '#f8fbff',
+          display: 'flex', flexDirection: 'column', gap: '10px',
+        }}>
+          {/* Held item */}
+          <div>
             <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Held Item
             </div>
@@ -613,8 +927,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                 <Tooltip content={heldItemDescription(heldItem, data)} maxWidth={220}>
                   <img
                     src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${heldItem.identifier}.png`}
-                    alt={heldItem.name}
-                    width={20} height={20}
+                    alt={heldItem.name} width={20} height={20}
                     style={{ imageRendering: 'pixelated', flexShrink: 0, cursor: 'help' }}
                     onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                   />
@@ -646,54 +959,72 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
             </div>
           </div>
 
-          <label style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            marginTop: '10px', cursor: 'pointer', fontSize: '12px',
-            color: mustOutspeed ? '#2b6cb0' : '#666',
-            fontWeight: mustOutspeed ? 700 : 400,
-          }}>
-            <input
-              type="checkbox"
-              checked={mustOutspeed}
-              onChange={e => onMustOutspeedChange(e.target.checked)}
-            />
-            Must outspeed {selected.name}
-          </label>
+          {/* Screens */}
+          <div>
+            <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Screens
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {([
+                { key: 'reflect',     label: '🛡 Reflect',      active: reflect,      onChange: onReflectChange,     activeColor: '#e53e3e', tooltip: 'Reflect reduces physical damage taken — ×0.5 in singles, ×2/3 in doubles.' },
+                { key: 'lightScreen', label: '✨ Light Screen', active: lightScreen,  onChange: onLightScreenChange, activeColor: '#d69e2e', tooltip: 'Light Screen reduces special damage taken — ×0.5 in singles, ×2/3 in doubles.' },
+              ] as const).map(({ key, label, active, onChange, activeColor, tooltip }) => (
+                <Tooltip key={key} content={tooltip} side="bottom" maxWidth={220}>
+                  <button
+                    onClick={() => onChange(!active)}
+                    style={{
+                      flex: 1, fontSize: '11px', fontWeight: 700, padding: '4px 6px',
+                      border: `1px solid ${active ? activeColor : '#ddd'}`,
+                      borderRadius: '5px', cursor: 'pointer',
+                      background: active ? activeColor : '#fff',
+                      color: active ? '#fff' : '#888',
+                      transition: 'all 0.15s',
+                    }}
+                  >{label}</button>
+                </Tooltip>
+              ))}
+            </div>
+          </div>
 
-          {/* Screen toggles */}
-          <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
-            {([
-              {
-                key: 'reflect',
-                label: '🛡 Reflect',
-                active: reflect,
-                onChange: onReflectChange,
-                activeColor: '#e53e3e',
-                tooltip: 'Reflect reduces physical damage taken — ×0.5 in singles, ×2/3 in doubles. Affects all physical move OHKO calculations for this target.',
-              },
-              {
-                key: 'lightScreen',
-                label: '✨ Light Screen',
-                active: lightScreen,
-                onChange: onLightScreenChange,
-                activeColor: '#d69e2e',
-                tooltip: 'Light Screen reduces special damage taken — ×0.5 in singles, ×2/3 in doubles. Affects all special move OHKO calculations for this target.',
-              },
-            ] as const).map(({ key, label, active, onChange, activeColor, tooltip }) => (
-              <Tooltip key={key} content={tooltip} side="bottom" maxWidth={220}>
+          {/* Speed modifiers */}
+          <div>
+            <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Modifiers
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <Tooltip content={`Tailwind doubles ${selected.name}'s Speed for 4 turns. Outspeed comparisons and speed chips use the doubled value.`} side="bottom" maxWidth={230}>
                 <button
-                  onClick={() => onChange(!active)}
+                  onClick={() => onTailwindChange(!tailwind)}
                   style={{
                     flex: 1, fontSize: '11px', fontWeight: 700, padding: '4px 6px',
-                    border: `1px solid ${active ? activeColor : '#ddd'}`,
+                    border: `1px solid ${tailwind ? '#2b6cb0' : '#ddd'}`,
                     borderRadius: '5px', cursor: 'pointer',
-                    background: active ? activeColor : '#fff',
-                    color: active ? '#fff' : '#888',
+                    background: tailwind ? '#ebf8ff' : '#fff',
+                    color: tailwind ? '#2b6cb0' : '#888',
                     transition: 'all 0.15s',
                   }}
-                >{label}</button>
+                >💨 Tailwind</button>
               </Tooltip>
-            ))}
+              <Tooltip
+                content={isDoubles
+                  ? `Friend Guard — an adjacent ally reduces all damage ${selected.name} takes by ×0.75 (25% reduction).`
+                  : 'Friend Guard only applies in doubles battles.'}
+                side="bottom" maxWidth={230}
+              >
+                <button
+                  onClick={() => isDoubles && onFriendGuardChange(!friendGuard)}
+                  style={{
+                    flex: 1, fontSize: '11px', fontWeight: 700, padding: '4px 6px',
+                    border: `1px solid ${friendGuard && isDoubles ? '#276749' : '#ddd'}`,
+                    borderRadius: '5px', cursor: isDoubles ? 'pointer' : 'not-allowed',
+                    background: friendGuard && isDoubles ? '#c6f6d5' : '#fff',
+                    color: friendGuard && isDoubles ? '#276749' : '#bbb',
+                    transition: 'all 0.15s',
+                    opacity: isDoubles ? 1 : 0.4,
+                  }}
+                >🛡 Friend Guard</button>
+              </Tooltip>
+            </div>
           </div>
         </div>
       )}
@@ -714,13 +1045,14 @@ function EVInput({ label, value, onChange }: { label: string; value: number; onC
   );
 }
 
-function StatPill({ label, base, computed }: { label: string; base: number; computed?: number }) {
-  return (
-    <span style={{ background: '#efefef', borderRadius: '5px', padding: '2px 6px', fontWeight: 600 }}>
+function StatPill({ label, base, computed, tooltip }: { label: string; base: number; computed?: number; tooltip?: React.ReactNode }) {
+  const pill = (
+    <span style={{ background: '#efefef', borderRadius: '5px', padding: '2px 6px', fontWeight: 600, cursor: tooltip ? 'help' : 'default' }}>
       {label}: {base}
       {computed !== undefined && <span style={{ color: '#999' }}> ({computed})</span>}
     </span>
   );
+  return tooltip ? <Tooltip content={tooltip} side="bottom" maxWidth={220}>{pill}</Tooltip> : pill;
 }
 
 const labelStyle: React.CSSProperties = {

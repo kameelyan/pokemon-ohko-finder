@@ -5,6 +5,50 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.6.0',
+    date: 'May 2026',
+    title: 'Battle Effects, Per-Target Modifiers & UI Polish',
+    sections: [
+      {
+        heading: '🌀 Battle Effects Dropdown',
+        items: [
+          'A new "Battle Effects" dropdown sits to the left of the Filters button and consolidates all field-wide conditions in one place.',
+          'Weather has moved here from the Filters panel — Sun, Rain, Sand, and Snow are all available.',
+          'Four terrain types are now supported: Electric, Grassy, Misty, and Psychic. Each boosts or dampens the relevant move types as per the in-game rules (e.g. Electric Terrain ×1.3 to Electric moves, Grassy Terrain ×0.5 to Earthquake/Magnitude/Bulldoze).',
+          'Fairy Aura can be toggled on, applying the ×4/3 damage multiplier to all Fairy-type moves.',
+          'Gravity can be toggled on, applying the ×5/3 accuracy boost (capped at 100%) and removing moves that cannot be used under Gravity (Fly, Bounce, Jump Kick, High Jump Kick, Sky Drop).',
+          'An inline ✕ inside the Battle Effects button clears all active conditions at once without needing a separate button.',
+        ],
+      },
+      {
+        heading: '🎯 Per-Target Modifiers',
+        items: [
+          'Each target Pokémon panel now has a collapsible "Additional Modifiers" section containing held item, screens, and combat modifiers — keeping the card tidy by default.',
+          'Tailwind can be toggled per target. When active, the target\'s effective Speed is doubled — all outspeed comparisons, the speed chip, and tooltip update automatically.',
+          'Friend Guard can be toggled per target (doubles only). When active, incoming damage to that target is reduced by ×0.75, reflecting the in-game ally support mechanic.',
+        ],
+      },
+      {
+        heading: '💡 Stat Chip Tooltips',
+        items: [
+          'Hovering any stat chip (HP, Def, SpD, Spe) in a target panel now shows a tooltip explaining both numbers displayed.',
+          'The tooltip lists the base stat, current EV and IV assumptions, any nature modifier, and the resulting Level 50 computed value.',
+          'If Tailwind is active on that target, the Spe tooltip additionally shows the effective doubled speed.',
+        ],
+      },
+      {
+        heading: '🎛 UI Polish',
+        items: [
+          'The results title now embeds the count directly in bold ("42 Pokémon can OHKO…"), removing the separate grey subtitle.',
+          'Sort control has moved to the far left of the controls bar; Filters and Expand All sit on the far right.',
+          'Sticky controls bar — the sort, filters, and expand controls now stay pinned to the top of the viewport as you scroll through results.',
+          'Target panel minimum width increased from 250 px to 320 px so all four EV inputs fit in a single row.',
+          'Stat chips now have slightly more vertical spacing when they wrap onto a second line.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.5.0',
     date: 'May 2026',
     title: 'Screens, Spread Moves & Battle Format',

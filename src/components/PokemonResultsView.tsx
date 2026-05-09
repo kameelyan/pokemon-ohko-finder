@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import type { PokemonOHKOResult, OHKOMoveInfo, Weather } from '../calc/damage';
-import { WEATHER_INFO } from '../calc/damage';
+import type { PokemonOHKOResult, OHKOMoveInfo, Weather, Terrain } from '../calc/damage';
+import { WEATHER_INFO, TERRAIN_INFO } from '../calc/damage';
 import type { MoveFlag } from '../data/types';
 import { calcStat } from '../calc/damage';
 import type { GameData, Pokemon } from '../data/types';
@@ -74,6 +74,7 @@ function ItemIcon({ identifier, name, boost, size = 16 }: { identifier: string; 
 }
 
 interface Props {
+  title: string;
   results: PokemonOHKOResult[];
   targetNames: string[];
   targetSpeeds: number[];
@@ -86,6 +87,12 @@ interface Props {
   onMinAccuracyChange: (v: number) => void;
   weather: Weather;
   onWeatherChange: (w: Weather) => void;
+  gravity: boolean;
+  onGravityChange: (v: boolean) => void;
+  terrain: Terrain;
+  onTerrainChange: (t: Terrain) => void;
+  fairyAura: boolean;
+  onFairyAuraChange: (v: boolean) => void;
   isDoubles: boolean;
 }
 
@@ -168,7 +175,7 @@ const EMPTY_FILTERS: Filters = {
   excludedFlags: new Set(),
 };
 
-function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boolean, weather: Weather): number {
+function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boolean): number {
   return (
     f.types.size +
     (f.minSpe !== '' ? 1 : 0) +
@@ -181,14 +188,27 @@ function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boole
     (f.defaultOnly ? 1 : 0) +
     (f.excludedFlags.size > 0 ? 1 : 0) +
     (showPossible ? 1 : 0) +
-    (minAccuracy > 0 ? 1 : 0) +
-    (weather !== 'none' ? 1 : 0)
+    (minAccuracy > 0 ? 1 : 0)
   );
+}
+
+// ── Speed helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Returns the minimum EV investment (0..252 step 4) for `baseSpe` to strictly
+ * outspeed `targetSpeed` at L50 with the given nature multiplier, or null if
+ * even 252 EVs cannot achieve it.
+ */
+function minSpeedEVs(baseSpe: number, targetSpeed: number, natureMult: number): number | null {
+  for (let ev = 0; ev <= 252; ev += 4) {
+    if (calcStat(baseSpe, ev, 31, 50, natureMult) > targetSpeed) return ev;
+  }
+  return null;
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export default function PokemonResultsView({ results, targetNames, targetSpeeds, mustOutspeedSpeeds, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, isDoubles }: Props) {
+export default function PokemonResultsView({ title, results, targetNames, targetSpeeds, mustOutspeedSpeeds, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, gravity, onGravityChange, terrain, onTerrainChange, fairyAura, onFairyAuraChange, isDoubles }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -212,7 +232,9 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
   // Apply filters
   const filteredResults = useMemo(() => {
     return results.filter(r => {
-      const spe = calcStat(r.pokemon.stats.spe, 0);
+      const spe    = calcStat(r.pokemon.stats.spe, 0);
+      // Max reachable speed: 252 EVs + ×1.1 (+Spe nature) at L50
+      const maxSpe = calcStat(r.pokemon.stats.spe, 252, 31, 50, 1.1);
 
       if (filters.types.size > 0 && !r.pokemon.typeIds.some(t => filters.types.has(t))) return false;
 
@@ -223,12 +245,21 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
       const movesFirst = (a: number, t: number) => filters.trickRoom ? a < t : a > t;
 
       if (targetSpeeds.length > 0 && filters.outspeed !== 'any') {
-        if (filters.outspeed === 'all'  && !targetSpeeds.every(ts => movesFirst(spe, ts))) return false;
-        if (filters.outspeed === 'none' && targetSpeeds.some(ts => movesFirst(spe, ts)))   return false;
+        // "Faster than all" — use max potential speed in normal mode so we include
+        // Pokémon that could outspeed with EV/nature investment.
+        if (filters.outspeed === 'all') {
+          const speCheck = filters.trickRoom ? spe : maxSpe;
+          if (!targetSpeeds.every(ts => movesFirst(speCheck, ts))) return false;
+        }
+        if (filters.outspeed === 'none' && targetSpeeds.some(ts => movesFirst(spe, ts))) return false;
       }
 
-      // Per-target must-outspeed constraints (set on the target panel, TR-aware)
-      if (mustOutspeedSpeeds.length > 0 && !mustOutspeedSpeeds.every(ts => movesFirst(spe, ts))) return false;
+      // Per-target must-outspeed constraints — in non-TR show anything that COULD
+      // outspeed at max investment; in TR keep the uninvested check.
+      if (mustOutspeedSpeeds.length > 0) {
+        const speCheck = filters.trickRoom ? spe : maxSpe;
+        if (!mustOutspeedSpeeds.every(ts => movesFirst(speCheck, ts))) return false;
+      }
 
       if (filters.category !== 'all') {
         const physical = filters.category === 'physical';
@@ -279,7 +310,7 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
   const expandAll = () => setExpandedIds(new Set(sortedResults.map(r => r.pokemon.id)));
   const collapseAll = () => setExpandedIds(new Set());
 
-  const activeFilterCount = countActiveFilters(filters, minAccuracy, showPossible, weather);
+  const activeFilterCount = countActiveFilters(filters, minAccuracy, showPossible);
 
   const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) =>
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -309,64 +340,90 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
 
   return (
     <div>
-      {/* ── Top bar ── */}
+      {/* ── Sticky controls wrapper ── */}
+      <div style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        background: '#f8f9fa',
+        paddingTop: '8px',
+        marginTop: '-8px',
+        paddingBottom: '2px',
+      }}>
+      {/* ── Title row ── */}
+      <h2 style={{ margin: '0 0 10px', fontSize: '18px', fontWeight: 800, color: '#1a202c' }}>
+        <span style={{ color: '#2b6cb0' }}>{guaranteed.length}</span> {title}
+        {showPossible && possible.length > 0 && (
+          <span style={{ fontSize: '14px', fontWeight: 500, color: '#888', marginLeft: '8px' }}>
+            +{possible.length} possible
+          </span>
+        )}
+        {activeFilterCount > 0 && (
+          <span style={{ fontSize: '13px', fontWeight: 400, color: '#aaa', marginLeft: '8px' }}>
+            ({filteredResults.length} of {results.length} shown)
+          </span>
+        )}
+      </h2>
+
+      {/* ── Controls bar: sort far-left · filters + expand far-right ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-        <p style={{ color: '#666', fontSize: '14px', margin: 0 }}>
-          <strong>{guaranteed.length}</strong> Pokémon with guaranteed OHKOs
-          {showPossible && possible.length > 0 && <>, <strong>{possible.length}</strong> more with possible OHKOs</>}
-          {activeFilterCount > 0 && (
-            <span style={{ color: '#999' }}> &nbsp;(showing {filteredResults.length} of {results.length})</span>
-          )}
-          .
-        </p>
+        {/* Sort controls — far left */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sort</span>
+          <select
+            value={sortKey}
+            onChange={e => setSortKey(e.target.value as SortKey)}
+            style={{
+              fontSize: '12px', padding: '4px 6px', border: '1px solid #ddd',
+              borderRadius: '6px', background: '#fff', color: '#555', cursor: 'pointer',
+            }}
+          >
+            {SORT_OPTIONS.map(o => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+            title={sortDir === 'asc' ? 'Ascending — click to switch to descending' : 'Descending — click to switch to ascending'}
+            style={{
+              ...btnStyle, padding: '4px 8px', fontWeight: 700, fontSize: '13px',
+              color: '#555', minWidth: '32px', textAlign: 'center',
+            }}
+          >
+            {sortDir === 'asc' ? '↑' : '↓'}
+          </button>
+        </div>
+
+        {/* Battle Effects + Filters + expand/collapse — far right */}
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Sort controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sort</span>
-            <select
-              value={sortKey}
-              onChange={e => setSortKey(e.target.value as SortKey)}
-              style={{
-                fontSize: '12px', padding: '4px 6px', border: '1px solid #ddd',
-                borderRadius: '6px', background: '#fff', color: '#555', cursor: 'pointer',
-              }}
-            >
-              {SORT_OPTIONS.map(o => (
-                <option key={o.key} value={o.key}>{o.label}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-              title={sortDir === 'asc' ? 'Ascending — click to switch to descending' : 'Descending — click to switch to ascending'}
-              style={{
-                ...btnStyle, padding: '4px 8px', fontWeight: 700, fontSize: '13px',
-                color: '#555', minWidth: '32px', textAlign: 'center',
-              }}
-            >
-              {sortDir === 'asc' ? '↑' : '↓'}
-            </button>
-          </div>
-
-          <div style={{ width: '1px', height: '20px', background: '#e2e8f0', alignSelf: 'center' }} />
-
-          {activeFilterCount > 0 && (
-            <button
-              onClick={() => { setFilters(EMPTY_FILTERS); onMinAccuracyChange(0); onShowPossibleChange(false); onWeatherChange('none'); }}
-              style={{ ...btnStyle, color: '#e53e3e', borderColor: '#e53e3e' }}
-            >
-              ✕ Clear filters
-            </button>
-          )}
+          <BattlegroundDropdown
+            weather={weather}
+            onWeatherChange={onWeatherChange}
+            terrain={terrain}
+            onTerrainChange={onTerrainChange}
+            fairyAura={fairyAura}
+            onFairyAuraChange={onFairyAuraChange}
+            gravity={gravity}
+            onGravityChange={onGravityChange}
+          />
           <button
             onClick={() => setFiltersOpen(v => !v)}
             style={{
               ...btnStyle,
               background: filtersOpen ? '#fff7ed' : '#fff',
-              borderColor: filtersOpen ? '#f59e0b' : '#ddd',
+              borderColor: filtersOpen ? '#f59e0b' : activeFilterCount > 0 ? '#e53e3e' : '#ddd',
               color: filtersOpen ? '#b45309' : '#555',
               display: 'flex', alignItems: 'center', gap: '6px',
             }}
           >
+            {activeFilterCount > 0 && (
+              <Tooltip content="Clear all active filters" side="top">
+                <span
+                  onClick={e => { e.stopPropagation(); setFilters(EMPTY_FILTERS); onMinAccuracyChange(0); onShowPossibleChange(false); onWeatherChange('none'); }}
+                  style={{ color: '#e53e3e', fontWeight: 800, lineHeight: 1, padding: '0 2px' }}
+                >✕</span>
+              </Tooltip>
+            )}
             Filters
             {activeFilterCount > 0 && (
               <span style={{
@@ -484,36 +541,6 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
             </div>
 
             <div>
-              <div style={filterLabel}>Weather</div>
-              <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
-                {(['none', 'sun', 'rain', 'sand', 'snow'] as Weather[]).map(w => {
-                  const info = w !== 'none' ? WEATHER_INFO[w] : null;
-                  const active = weather === w;
-                  return (
-                    <Tooltip
-                      key={w}
-                      content={info ? `${info.icon} ${info.label}: ${info.description}` : 'No weather — standard conditions'}
-                      side="bottom"
-                    >
-                      <button
-                        onClick={() => onWeatherChange(w)}
-                        style={{
-                          ...toggleBtnStyle,
-                          background: active ? (info?.bg ?? '#e53e3e') : '#fff',
-                          color: active ? (info?.color ?? '#fff') : '#555',
-                          borderColor: active ? (info?.color ?? '#e53e3e') : '#ddd',
-                          fontWeight: active ? 700 : 500,
-                        }}
-                      >
-                        {info ? `${info.icon} ${info.label}` : 'None'}
-                      </button>
-                    </Tooltip>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
               <div style={filterLabel}>Min. Accuracy</div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
                 {([
@@ -606,7 +633,7 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
           {activeFilterCount > 0 && (
             <div>
               <button
-                onClick={() => { setFilters(EMPTY_FILTERS); onMinAccuracyChange(0); onShowPossibleChange(false); onWeatherChange('none'); }}
+                onClick={() => { setFilters(EMPTY_FILTERS); onMinAccuracyChange(0); onShowPossibleChange(false); }}
                 style={{ ...btnStyle, color: '#e53e3e', borderColor: '#e53e3e' }}
               >
                 Clear all filters
@@ -615,6 +642,8 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
           )}
         </div>
       )}
+
+      </div>{/* end sticky wrapper */}
 
       {/* ── Results list ── */}
       {sortedResults.length === 0 && activeFilterCount > 0 && (
@@ -763,6 +792,81 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                     </span>
                   </Tooltip>
 
+                  {/* Speed investment chip — only in normal (non-TR) mode with targets */}
+                  {targetSpeeds.length > 0 && !filters.trickRoom && (() => {
+                    const worstTarget = Math.max(...targetSpeeds);
+                    // Already outspeeds at 0 EVs neutral → no chip
+                    if (attackerSpe > worstTarget) return null;
+
+                    const evNeutral = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.0);
+                    const evPlus    = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.1);
+
+                    // Cannot outspeed even at full investment → no chip
+                    if (evNeutral === null && evPlus === null) return null;
+
+                    // Build chip label
+                    let label: string;
+                    if (evNeutral !== null && evPlus !== null && evPlus < evNeutral) {
+                      label = `⚡ +${evNeutral} EVs · +Spe: ${evPlus} EVs`;
+                    } else if (evNeutral !== null) {
+                      label = `⚡ +${evNeutral} EVs`;
+                    } else {
+                      // evPlus !== null, evNeutral === null
+                      label = `⚡ +Spe: ${evPlus} EVs`;
+                    }
+
+                    const onlyWithNature = evNeutral === null;
+
+                    const tooltipContent = (
+                      <div>
+                        <div style={{ fontWeight: 700, marginBottom: '7px' }}>Speed Investment Needed</div>
+                        {targetSpeeds.map((ts, i) => {
+                          const alreadyOutspeeds = attackerSpe > ts;
+                          const enN = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.0);
+                          const enP = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.1);
+                          const cantAtAll = !alreadyOutspeeds && enN === null && enP === null;
+                          return (
+                            <div key={i} style={{ marginBottom: '6px' }}>
+                              <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '2px' }}>
+                                vs {targetNames[i]} ({ts} Spe)
+                              </div>
+                              {alreadyOutspeeds ? (
+                                <div style={{ color: '#68d391', fontWeight: 700, fontSize: '12px' }}>Already outspeeds ✓</div>
+                              ) : cantAtAll ? (
+                                <div style={{ color: '#fc8181', fontWeight: 700, fontSize: '12px' }}>Cannot outspeed</div>
+                              ) : (
+                                <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                                  {enN !== null && (
+                                    <div>{enN === 0 ? 'Already outspeeds (neutral)' : `${enN} EVs — neutral nature`}</div>
+                                  )}
+                                  {enP !== null && enP !== enN && (
+                                    <div style={{ color: '#f6ad55' }}>{enP === 0 ? 'Already outspeeds (+Spe)' : `${enP} EVs — +Spe nature`}</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+
+                    return (
+                      <Tooltip content={tooltipContent} maxWidth={240} key="spe-invest">
+                        <span style={{
+                          background: onlyWithNature ? '#fffbeb' : '#ebf8ff',
+                          border: `1px solid ${onlyWithNature ? '#f6ad55' : '#90cdf4'}`,
+                          color: onlyWithNature ? '#744210' : '#2b6cb0',
+                          borderRadius: '5px', padding: '2px 7px',
+                          fontSize: '11px', fontWeight: 700, cursor: 'help',
+                          display: 'inline-flex', alignItems: 'center',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {label}
+                        </span>
+                      </Tooltip>
+                    );
+                  })()}
+
                 </div>
 
                 {/* Row 2: ability chips (left) + move counts + status badge (right) */}
@@ -844,7 +948,10 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                         vs {targetNames[ti]} ({moves[0]?.targetHP ?? '?'} HP)
                       </div>
                       <MoveTable
-                        moves={moves}
+                        moves={moves.filter(m =>
+                          (!filters.noItem || !m.item) &&
+                          (!filters.noEvs  || m.evNeeded === 0)
+                        )}
                         data={data}
                         totalTargets={movesPerTarget.length}
                         targetNames={targetNames}
@@ -1198,6 +1305,215 @@ function MoveFlagsDropdown({
               ✕ Show all flags
             </button>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Battleground Effects dropdown ───────────────────────────────────────────
+
+function BattlegroundDropdown({
+  weather, onWeatherChange,
+  terrain, onTerrainChange,
+  fairyAura, onFairyAuraChange,
+  gravity, onGravityChange,
+}: {
+  weather: Weather;
+  onWeatherChange: (w: Weather) => void;
+  terrain: Terrain;
+  onTerrainChange: (t: Terrain) => void;
+  fairyAura: boolean;
+  onFairyAuraChange: (v: boolean) => void;
+  gravity: boolean;
+  onGravityChange: (v: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const activeCount = (weather !== 'none' ? 1 : 0) + (terrain !== 'none' ? 1 : 0) + (fairyAura ? 1 : 0) + (gravity ? 1 : 0);
+
+  const TERRAINS: { key: Terrain; label: string; icon: string }[] = [
+    { key: 'none',     label: 'None',     icon: '—'  },
+    { key: 'electric', label: 'Electric', icon: '⚡' },
+    { key: 'grassy',   label: 'Grassy',   icon: '🌿' },
+    { key: 'misty',    label: 'Misty',    icon: '🌫️' },
+    { key: 'psychic',  label: 'Psychic',  icon: '🔮' },
+  ];
+
+  const sectionLabel: React.CSSProperties = {
+    fontSize: '10px', fontWeight: 700, textTransform: 'uppercase',
+    letterSpacing: '0.06em', color: '#aaa', marginBottom: '6px',
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          ...btnStyle,
+          background: open ? '#f0f7ff' : '#fff',
+          borderColor: open ? '#90cdf4' : activeCount > 0 ? '#2b6cb0' : '#ddd',
+          color: open || activeCount > 0 ? '#2b6cb0' : '#555',
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+        }}
+      >
+        {activeCount > 0 && (
+          <Tooltip content="Clear all battle effects" side="top">
+            <span
+              onClick={e => { e.stopPropagation(); onWeatherChange('none'); onTerrainChange('none'); onFairyAuraChange(false); onGravityChange(false); }}
+              style={{ color: '#2b6cb0', fontWeight: 800, lineHeight: 1, padding: '0 2px' }}
+            >✕</span>
+          </Tooltip>
+        )}
+        Battle Effects
+        {activeCount > 0 && (
+          <span style={{
+            background: '#2b6cb0', color: '#fff',
+            borderRadius: '999px', fontSize: '10px', fontWeight: 700,
+            padding: '1px 6px', lineHeight: 1.4,
+          }}>{activeCount}</span>
+        )}
+        <span style={{ fontSize: '10px' }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 200,
+          background: '#fff', border: '1px solid #e2e8f0',
+          borderRadius: '10px', padding: '14px 16px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          minWidth: '280px',
+          display: 'flex', flexDirection: 'column', gap: '14px',
+        }}>
+
+          {/* Weather */}
+          <div>
+            <div style={sectionLabel}>Weather</div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {(['none', 'sun', 'rain', 'sand', 'snow'] as Weather[]).map(w => {
+                const info = w !== 'none' ? WEATHER_INFO[w] : null;
+                const active = weather === w;
+                const btn = (
+                  <button
+                    key={w}
+                    onClick={() => onWeatherChange(w)}
+                    style={{
+                      ...toggleBtnStyle,
+                      background: active ? (info?.bg ?? '#fff') : '#fff',
+                      color: active ? (info?.color ?? '#555') : '#555',
+                      borderColor: active ? (info?.color ?? '#ddd') : '#ddd',
+                      fontWeight: active ? 700 : 500,
+                    }}
+                  >
+                    {info ? `${info.icon} ${info.label}` : 'None'}
+                  </button>
+                );
+                return info ? (
+                  <Tooltip key={w} content={`${info.icon} ${info.label}: ${info.description}`} side="bottom">
+                    {btn}
+                  </Tooltip>
+                ) : btn;
+              })}
+            </div>
+          </div>
+
+          {/* Terrain */}
+          <div>
+            <div style={sectionLabel}>Terrain</div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {TERRAINS.map(({ key, label, icon }) => {
+                const info = key !== 'none' ? TERRAIN_INFO[key] : null;
+                const active = terrain === key;
+                const btn = (
+                  <button
+                    key={key}
+                    onClick={() => onTerrainChange(key)}
+                    style={{
+                      ...toggleBtnStyle,
+                      background: active ? (info?.bg ?? '#e53e3e') : '#fff',
+                      color: active ? (info?.color ?? '#fff') : '#555',
+                      borderColor: active ? (info?.color ?? '#e53e3e') : '#ddd',
+                      fontWeight: active ? 700 : 500,
+                    }}
+                  >
+                    {icon} {label}
+                  </button>
+                );
+                return info ? (
+                  <Tooltip key={key} content={`${info.icon} ${info.label}: ${info.description}`} side="bottom">
+                    {btn}
+                  </Tooltip>
+                ) : btn;
+              })}
+            </div>
+          </div>
+
+          {/* Auras */}
+          <div>
+            <div style={sectionLabel}>Aura</div>
+            <Tooltip
+              content="Fairy Aura — boosts the power of all Fairy-type moves by ×4/3 for every Pokémon on the field. Emitted by Xerneas."
+              side="bottom"
+              maxWidth={260}
+            >
+              <button
+                onClick={() => onFairyAuraChange(!fairyAura)}
+                style={{
+                  ...toggleBtnStyle,
+                  background: fairyAura ? '#fdf2f8' : '#fff',
+                  color: fairyAura ? '#9d174d' : '#555',
+                  borderColor: fairyAura ? '#f9a8d4' : '#ddd',
+                  fontWeight: fairyAura ? 700 : 500,
+                }}
+              >
+                ✨ Fairy Aura
+              </button>
+            </Tooltip>
+          </div>
+
+          {/* Field Moves */}
+          <div>
+            <div style={sectionLabel}>Field Moves</div>
+            <Tooltip
+              content={
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: '5px' }}>⬇ Gravity</div>
+                  <div style={{ marginBottom: '4px' }}>
+                    <span style={{ color: '#90cdf4', fontWeight: 700 }}>Accuracy ×5/3</span> — all moves with finite accuracy are capped at 100%. Stone Edge, Focus Blast, Fire Blast and others all become guaranteed to hit.
+                  </div>
+                  <div>
+                    <span style={{ color: '#fc8181', fontWeight: 700 }}>Unusable moves excluded</span> — Fly, Bounce, Sky Drop, Jump Kick, and High Jump Kick are removed from results.
+                  </div>
+                </div>
+              }
+              side="bottom"
+              maxWidth={270}
+            >
+              <button
+                onClick={() => onGravityChange(!gravity)}
+                style={{
+                  ...toggleBtnStyle,
+                  background: gravity ? '#ebf8ff' : '#fff',
+                  color: gravity ? '#2b6cb0' : '#555',
+                  borderColor: gravity ? '#90cdf4' : '#ddd',
+                  fontWeight: gravity ? 700 : 500,
+                }}
+              >
+                ⬇ Gravity
+              </button>
+            </Tooltip>
+          </div>
+
         </div>
       )}
     </div>

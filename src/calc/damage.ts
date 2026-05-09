@@ -1,5 +1,11 @@
 import type { GameData, Move, Pokemon } from '../data/types';
 
+/**
+ * Moves that cannot be used while Gravity is in effect.
+ * (Fly, Jump Kick, High Jump Kick, Bounce, Sky Drop)
+ */
+const GRAVITY_UNUSABLE_MOVE_IDS = new Set([19, 26, 136, 340, 507]);
+
 export interface EVSpread {
   hp: number;
   def: number;
@@ -13,6 +19,11 @@ export interface TargetConfig {
   heldItem?: TargetHeldItem;
   reflect?: boolean;
   lightScreen?: boolean;
+  defNature?: number;  // 0.9 | 1.0 | 1.1
+  spdNature?: number;
+  speNature?: number;
+  /** Partner Pokémon has Friend Guard — reduces all incoming damage by ×0.75 (doubles only). */
+  friendGuard?: boolean;
 }
 
 export interface TargetHeldItem {
@@ -58,6 +69,38 @@ export interface HeldItem {
 
 /** Active weather condition. Affects damage for certain move types and some abilities. */
 export type Weather = 'none' | 'sun' | 'rain' | 'sand' | 'snow';
+
+/** Active terrain. Affects damage for certain move types. */
+export type Terrain = 'none' | 'electric' | 'grassy' | 'misty' | 'psychic';
+
+export const TERRAIN_INFO: Record<Exclude<Terrain, 'none'>, {
+  label: string;
+  icon: string;
+  bg: string;
+  color: string;
+  description: string;
+}> = {
+  electric: { label: 'Electric Terrain', icon: '⚡', bg: '#fefce8', color: '#a16207', description: 'Boosts Electric-type moves ×1.3 for grounded Pokémon.' },
+  grassy:   { label: 'Grassy Terrain',   icon: '🌿', bg: '#f0fff4', color: '#276749', description: 'Boosts Grass-type moves ×1.3. Weakens Earthquake, Magnitude & Bulldoze ×0.5.' },
+  misty:    { label: 'Misty Terrain',    icon: '🌫️', bg: '#fdf2f8', color: '#9d174d', description: 'Halves the power of Dragon-type moves against grounded Pokémon.' },
+  psychic:  { label: 'Psychic Terrain',  icon: '🔮', bg: '#faf5ff', color: '#6b21a8', description: 'Boosts Psychic-type moves ×1.3 for grounded Pokémon.' },
+};
+
+/** Move IDs weakened ×0.5 under Grassy Terrain (Earthquake, Magnitude, Bulldoze). */
+const GRASSY_WEAKENED_MOVE_IDS = new Set([89, 222, 523]);
+
+function getTerrainMult(terrain: Terrain, moveId: number, effectiveTypeId: number): number {
+  switch (terrain) {
+    case 'electric': return effectiveTypeId === 13 ? 1.3 : 1.0;
+    case 'grassy':
+      if (effectiveTypeId === 12) return 1.3;           // Grass moves boosted
+      if (GRASSY_WEAKENED_MOVE_IDS.has(moveId)) return 0.5; // Ground spread moves weakened
+      return 1.0;
+    case 'misty':   return effectiveTypeId === 16 ? 0.5 : 1.0; // Dragon moves halved
+    case 'psychic': return effectiveTypeId === 14 ? 1.3 : 1.0; // Psychic moves boosted
+    default:        return 1.0;
+  }
+}
 
 export const WEATHER_INFO: Record<Exclude<Weather, 'none'>, {
   label: string;
@@ -258,6 +301,7 @@ interface TargetStats {
   typeResists: { typeId: number; mult: number }[];
   reflect: boolean;
   lightScreen: boolean;
+  friendGuard: boolean;
 }
 
 interface OHKOAttempt {
@@ -281,13 +325,19 @@ function tryOHKO(
   abilityMod: AbilityMod | null,
   weather: Weather,
   isDoubles: boolean,
+  gravity: boolean,
+  terrain: Terrain,
+  fairyAura: boolean,
 ): OHKOAttempt | null {
   const effectiveTypeId = abilityMod?.typeOverride ?? move.typeId;
 
-  const moveAcc = move.accuracy;
-  const adjAccuracy = moveAcc === null
+  // Gravity boosts all finite accuracy values by ×5/3 (capped at 100)
+  const baseAcc = move.accuracy === null ? null
+    : gravity ? Math.min(100, Math.floor(move.accuracy * 5 / 3))
+    : move.accuracy;
+  const adjAccuracy = baseAcc === null
     ? null
-    : moveAcc * ts.accuracyMult * (abilityMod?.accMult ?? 1.0);
+    : baseAcc * ts.accuracyMult * (abilityMod?.accMult ?? 1.0);
   if (adjAccuracy !== null && adjAccuracy < minAccuracy) return null;
 
   let effFactor = getEffectiveness(effectiveTypeId, ts.pokemon.typeIds, data.typeEfficacy);
@@ -308,10 +358,16 @@ function tryOHKO(
   const stabFactor = stab ? (abilityMod?.stabMult ?? 1.5) : 1.0;
 
   // Weather multiplies the effective power (after ability)
-  const weatherMult = getWeatherMult(weather, effectiveTypeId);
+  const weatherMult  = getWeatherMult(weather, effectiveTypeId);
+  // Terrain multiplies the effective power
+  const terrainMult  = getTerrainMult(terrain, move.id, effectiveTypeId);
+  // Fairy Aura boosts all Fairy-type moves ×4/3 for every Pokémon on the field
+  const fairyAuraMult = (fairyAura && effectiveTypeId === 18) ? (4 / 3) : 1.0;
   // Spread moves deal ×0.75 damage in doubles format
   const spreadMult = (isDoubles && move.isSpread) ? 0.75 : 1.0;
-  const effectivePower = move.power * (abilityMod?.powerMult ?? 1.0) * weatherMult * spreadMult;
+  // Friend Guard (doubles only): adjacent ally reduces all incoming damage by ×0.75
+  const friendGuardMult = ts.friendGuard ? 0.75 : 1.0;
+  const effectivePower = move.power * (abilityMod?.powerMult ?? 1.0) * weatherMult * terrainMult * fairyAuraMult * spreadMult * friendGuardMult;
 
   let evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible);
   let item: HeldItem | undefined;
@@ -339,20 +395,24 @@ export function findPokemonOHKOs(
   minAccuracy = 0,
   weather: Weather = 'none',
   isDoubles = true,
+  gravity = false,
+  terrain: Terrain = 'none',
+  fairyAura = false,
 ): PokemonOHKOResult[] {
   if (targets.length === 0) return [];
 
   const targetStats: TargetStats[] = targets.map(t => ({
     pokemon: t.pokemon,
     hp: calcHP(t.pokemon.stats.hp, t.evs.hp),
-    def: calcStat(t.pokemon.stats.def, t.evs.def),
-    spd: calcStat(t.pokemon.stats.spd, t.evs.spd),
+    def: calcStat(t.pokemon.stats.def, t.evs.def, 31, 50, t.defNature ?? 1.0),
+    spd: calcStat(t.pokemon.stats.spd, t.evs.spd, 31, 50, t.spdNature ?? 1.0),
     defMult: t.heldItem?.defMult ?? 1.0,
     spdMult: t.heldItem?.spdMult ?? 1.0,
     accuracyMult: t.heldItem?.accuracyMult ?? 1.0,
     typeResists: t.heldItem?.typeResists ?? [],
     reflect: t.reflect ?? false,
     lightScreen: t.lightScreen ?? false,
+    friendGuard: t.friendGuard ?? false,
   }));
 
   const results: PokemonOHKOResult[] = [];
@@ -366,6 +426,8 @@ export function findPokemonOHKOs(
     for (const moveId of moveIds) {
       const move = data.moves.get(moveId);
       if (!move) continue;
+      // Some moves (Fly, Bounce, Jump Kick, High Jump Kick, Sky Drop) can't be used under Gravity
+      if (gravity && GRAVITY_UNUSABLE_MOVE_IDS.has(move.id)) continue;
 
       const isPhysical = move.damageClassId === 2;
       const atkBase = isPhysical ? attacker.stats.atk : attacker.stats.spa;
@@ -386,7 +448,7 @@ export function findPokemonOHKOs(
       const findBest = (configs: AbilityConfig[], w: Weather, ts: TargetStats) => {
         let best: { attempt: OHKOAttempt; ability: typeof attacker.abilities[0] | null } | null = null;
         for (const { mod, ability } of configs) {
-          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles);
+          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura);
           if (attempt && (!best || attempt.evNeeded < best.attempt.evNeeded)) {
             best = { attempt, ability };
           }
