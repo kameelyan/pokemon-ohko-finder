@@ -37,6 +37,7 @@ export interface Move {
   priority: number;       // 0 = normal, +1/+2 = fast priority, negative = slow
   flags: MoveFlag[];
   effectChance: number | null; // chance of secondary effect (> 0 = Sheer Force applicable)
+  isSpread: boolean;     // hits multiple targets (×0.75 in doubles): target_id 9 or 11
 }
 
 export interface PokemonMoveEntry {

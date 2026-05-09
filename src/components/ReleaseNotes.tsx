@@ -5,6 +5,40 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.5.0',
+    date: 'May 2026',
+    title: 'Screens, Spread Moves & Battle Format',
+    sections: [
+      {
+        heading: '🛡 Reflect & Light Screen',
+        items: [
+          'Each target Pokémon panel now has 🛡 Reflect and ✨ Light Screen toggle buttons.',
+          'When active, the appropriate damage reduction is applied to all OHKO calculations for that target — physical moves for Reflect, special moves for Light Screen.',
+          'Reduction is format-aware: ×0.5 damage in singles, ×2/3 damage in doubles.',
+          'Quick "All" and "None" buttons above the target grid let you apply or clear each screen across every target at once.',
+          'Hover either button for a tooltip explaining the mechanic and the per-format values.',
+        ],
+      },
+      {
+        heading: '↔ Spread Moves',
+        items: [
+          'Moves that hit multiple targets (e.g. Rock Slide, Earthquake, Heat Wave, Hyper Voice, Discharge, Surf) are now identified and tagged with a light-blue "↔ Spread" chip in the results.',
+          'In doubles format the chip shows "↔ Spread ×0.75", reflecting the damage penalty applied in calculations. In singles format no penalty is applied and the chip shows "↔ Spread" only.',
+          'Spread detection is based on move target data: "all-adjacent" (target 9) and "all-adjacent-foes" (target 11).',
+        ],
+      },
+      {
+        heading: '⚔ Singles / Doubles Format Toggle',
+        items: [
+          'A Singles / Doubles segmented button has been added to the top of the target panel, next to the Pokémon Champions toggle.',
+          'Defaults to Doubles, matching the VGC competitive format.',
+          'Switching to Singles removes the spread move damage penalty and uses the stronger ×0.5 screen reduction.',
+          'Hover the toggle for a tooltip explaining what changes between formats.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.4.0',
     date: 'May 2026',
     title: 'Target Speed EVs',

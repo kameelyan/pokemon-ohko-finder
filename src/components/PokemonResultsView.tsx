@@ -86,6 +86,7 @@ interface Props {
   onMinAccuracyChange: (v: number) => void;
   weather: Weather;
   onWeatherChange: (w: Weather) => void;
+  isDoubles: boolean;
 }
 
 /** Full base-stat grid shown in the Pokémon header tooltip */
@@ -187,7 +188,7 @@ function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boole
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export default function PokemonResultsView({ results, targetNames, targetSpeeds, mustOutspeedSpeeds, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange }: Props) {
+export default function PokemonResultsView({ results, targetNames, targetSpeeds, mustOutspeedSpeeds, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, isDoubles }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -847,6 +848,7 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
                         data={data}
                         totalTargets={movesPerTarget.length}
                         targetNames={targetNames}
+                        isDoubles={isDoubles}
                       />
                     </div>
                   ))}
@@ -860,11 +862,12 @@ export default function PokemonResultsView({ results, targetNames, targetSpeeds,
   );
 }
 
-function MoveTable({ moves, data, totalTargets, targetNames }: {
+function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
   moves: OHKOMoveInfo[];
   data: GameData;
   totalTargets: number;
   targetNames: string[];
+  isDoubles: boolean;
 }) {
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -935,6 +938,25 @@ function MoveTable({ moves, data, totalTargets, targetNames }: {
                     </span>
                   </Tooltip>
                 ))}
+                {/* Spread chip */}
+                {m.move.isSpread && (
+                  <Tooltip
+                    content={isDoubles
+                      ? 'Spread move — hits all adjacent foes. ×0.75 damage applied (doubles format).'
+                      : 'Spread move — hits all adjacent foes. No damage penalty in singles format.'}
+                    side="bottom"
+                  >
+                    <span style={{
+                      marginLeft: '4px', fontSize: '10px', fontWeight: 700, cursor: 'help',
+                      background: '#e0f2fe', color: '#075985',
+                      border: '1px solid #7dd3fc',
+                      borderRadius: '3px', padding: '1px 5px',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {isDoubles ? '↔ Spread ×0.75' : '↔ Spread'}
+                    </span>
+                  </Tooltip>
+                )}
                 {/* Weather chip — shown when weather was required for this OHKO */}
                 {m.weatherRequired && (() => {
                   const wi = WEATHER_INFO[m.weatherRequired];

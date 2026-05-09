@@ -11,6 +11,8 @@ export interface TargetConfig {
   pokemon: Pokemon;
   evs: EVSpread;
   heldItem?: TargetHeldItem;
+  reflect?: boolean;
+  lightScreen?: boolean;
 }
 
 export interface TargetHeldItem {
@@ -254,6 +256,8 @@ interface TargetStats {
   spdMult: number;
   accuracyMult: number;
   typeResists: { typeId: number; mult: number }[];
+  reflect: boolean;
+  lightScreen: boolean;
 }
 
 interface OHKOAttempt {
@@ -276,6 +280,7 @@ function tryOHKO(
   minAccuracy: number,
   abilityMod: AbilityMod | null,
   weather: Weather,
+  isDoubles: boolean,
 ): OHKOAttempt | null {
   const effectiveTypeId = abilityMod?.typeOverride ?? move.typeId;
 
@@ -294,14 +299,19 @@ function tryOHKO(
   const isPhysical = move.damageClassId === 2;
   const rawDef = isPhysical ? ts.def : ts.spd;
   const statMult = isPhysical ? ts.defMult : ts.spdMult;
-  const defStat = Math.floor(rawDef * statMult);
+  // Screens: singles = ×0.5 damage (×2.0 defense), doubles = ×2/3 damage (×1.5 defense)
+  const screenDefMult = isDoubles ? 1.5 : 2.0;
+  const screenMult = isPhysical ? (ts.reflect ? screenDefMult : 1.0) : (ts.lightScreen ? screenDefMult : 1.0);
+  const defStat = Math.floor(rawDef * statMult * screenMult);
 
   const stab = attackerTypeIds.includes(effectiveTypeId);
   const stabFactor = stab ? (abilityMod?.stabMult ?? 1.5) : 1.0;
 
   // Weather multiplies the effective power (after ability)
   const weatherMult = getWeatherMult(weather, effectiveTypeId);
-  const effectivePower = move.power * (abilityMod?.powerMult ?? 1.0) * weatherMult;
+  // Spread moves deal ×0.75 damage in doubles format
+  const spreadMult = (isDoubles && move.isSpread) ? 0.75 : 1.0;
+  const effectivePower = move.power * (abilityMod?.powerMult ?? 1.0) * weatherMult * spreadMult;
 
   let evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible);
   let item: HeldItem | undefined;
@@ -328,6 +338,7 @@ export function findPokemonOHKOs(
   showPossible = false,
   minAccuracy = 0,
   weather: Weather = 'none',
+  isDoubles = true,
 ): PokemonOHKOResult[] {
   if (targets.length === 0) return [];
 
@@ -340,6 +351,8 @@ export function findPokemonOHKOs(
     spdMult: t.heldItem?.spdMult ?? 1.0,
     accuracyMult: t.heldItem?.accuracyMult ?? 1.0,
     typeResists: t.heldItem?.typeResists ?? [],
+    reflect: t.reflect ?? false,
+    lightScreen: t.lightScreen ?? false,
   }));
 
   const results: PokemonOHKOResult[] = [];
@@ -373,7 +386,7 @@ export function findPokemonOHKOs(
       const findBest = (configs: AbilityConfig[], w: Weather, ts: TargetStats) => {
         let best: { attempt: OHKOAttempt; ability: typeof attacker.abilities[0] | null } | null = null;
         for (const { mod, ability } of configs) {
-          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w);
+          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles);
           if (attempt && (!best || attempt.evNeeded < best.attempt.evNeeded)) {
             best = { attempt, ability };
           }

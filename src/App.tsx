@@ -20,6 +20,8 @@ interface TargetSlot {
   evs: EVSpread;
   mustOutspeed: boolean;
   heldItem: TargetHeldItem | null;
+  reflect: boolean;
+  lightScreen: boolean;
 }
 
 /** Shape written to / read from localStorage (no full Pokemon object). */
@@ -28,11 +30,13 @@ interface SavedSlot {
   evs: EVSpread;
   mustOutspeed?: boolean;
   heldItemIdentifier?: string;
+  reflect?: boolean;
+  lightScreen?: boolean;
 }
 
 let nextId = 1;
 function makeSlot(): TargetSlot {
-  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false, heldItem: null };
+  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false, heldItem: null, reflect: false, lightScreen: false };
 }
 
 export default function App() {
@@ -46,6 +50,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'finder' | 'notes'>('finder');
   const [championsOnly, setChampionsOnly] = useState(true);
+  const [isDoubles, setIsDoubles] = useState(true);
   const [results, setResults] = useState<PokemonOHKOResult[]>([]);
   const [computing, setComputing] = useState(false);
   const [showPossible, setShowPossible] = useState(false);
@@ -72,6 +77,8 @@ export default function App() {
             evs: { ...DEFAULT_EVS, ...s.evs },
             mustOutspeed: s.mustOutspeed ?? false,
             heldItem: TARGET_HELD_ITEMS.find(i => i.identifier === s.heldItemIdentifier) ?? null,
+            reflect: s.reflect ?? false,
+            lightScreen: s.lightScreen ?? false,
           }));
           restoredRef.current = true; // open gate before setSlots so the next save is correct
           setSlots(restored);
@@ -90,6 +97,8 @@ export default function App() {
       evs: s.evs,
       mustOutspeed: s.mustOutspeed,
       heldItemIdentifier: s.heldItem?.identifier,
+      reflect: s.reflect,
+      lightScreen: s.lightScreen,
     }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   }, [slots]);
@@ -113,7 +122,7 @@ export default function App() {
   // Slots with a selected Pokémon
   const activeTargets: TargetConfig[] = slots
     .filter(s => s.pokemon !== null)
-    .map(s => ({ pokemon: s.pokemon!, evs: s.evs, heldItem: s.heldItem ?? undefined }));
+    .map(s => ({ pokemon: s.pokemon!, evs: s.evs, heldItem: s.heldItem ?? undefined, reflect: s.reflect, lightScreen: s.lightScreen }));
 
   // EV-invested L50 speed for each active target
   const targetSpeeds: number[] = activeTargets.map(t => calcStat(t.pokemon.stats.spe, t.evs.spe));
@@ -127,11 +136,11 @@ export default function App() {
     if (!data || activeTargets.length === 0) { setResults([]); return; }
     setComputing(true);
     setTimeout(() => {
-      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather));
+      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather, isDoubles));
       setComputing(false);
     }, 10);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, slots, showPossible, minAccuracy, weather]);
+  }, [data, slots, showPossible, minAccuracy, weather, isDoubles]);
 
   /* ── slot helpers ── */
   const updateSlot = (id: number, patch: Partial<TargetSlot>) =>
@@ -238,36 +247,115 @@ export default function App() {
                   <p style={{ margin: '3px 0 0', fontSize: '13px', color: '#999' }}>
                     Select up to {MAX_TARGETS} Pokémon to find what can OHKO them
                   </p>
+                  {/* Screen shortcuts */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                    {([
+                      { key: 'reflect',     label: '🛡 Reflect',      color: '#e53e3e' },
+                      { key: 'lightScreen', label: '✨ Light Screen', color: '#d69e2e' },
+                    ] as { key: 'reflect' | 'lightScreen'; label: string; color: string }[]).map(({ key, label, color }) => {
+                      const allOn  = slots.every(s => s[key]);
+                      const anyOn  = slots.some(s => s[key]);
+                      return (
+                        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}:</span>
+                          <button
+                            onClick={() => setSlots(prev => prev.map(s => ({ ...s, [key]: true })))}
+                            disabled={allOn}
+                            style={{
+                              fontSize: '11px', padding: '2px 8px',
+                              border: `1px solid ${allOn ? color : '#ddd'}`,
+                              borderRadius: '4px', cursor: allOn ? 'default' : 'pointer',
+                              background: allOn ? color : '#fff',
+                              color: allOn ? '#fff' : '#555', fontWeight: 600,
+                            }}
+                          >All</button>
+                          <button
+                            onClick={() => setSlots(prev => prev.map(s => ({ ...s, [key]: false })))}
+                            disabled={!anyOn}
+                            style={{
+                              fontSize: '11px', padding: '2px 8px',
+                              border: '1px solid #ddd', borderRadius: '4px',
+                              cursor: anyOn ? 'pointer' : 'default',
+                              background: '#fff', color: anyOn ? '#555' : '#bbb', fontWeight: 600,
+                            }}
+                          >None</button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => setChampionsOnly(v => !v)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '7px',
-                    padding: '6px 14px',
-                    border: `1.5px solid ${championsOnly ? '#553c9a' : '#ddd'}`,
-                    borderRadius: '8px',
-                    background: championsOnly ? '#f3f0ff' : '#fff',
-                    color: championsOnly ? '#553c9a' : '#888',
-                    fontSize: '13px', fontWeight: 700, cursor: 'pointer',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <span>🏆</span>
-                  <span>Pokémon Champions</span>
-                  <span style={{
-                    width: '28px', height: '16px', borderRadius: '999px',
-                    background: championsOnly ? '#553c9a' : '#ddd',
-                    position: 'relative', flexShrink: 0, transition: 'background 0.15s',
-                  }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {/* Singles / Doubles toggle */}
+                  <Tooltip
+                    content={
+                      <div>
+                        <div style={{ fontWeight: 700, marginBottom: '5px' }}>Battle Format</div>
+                        <div style={{ color: '#ccc', marginBottom: '6px' }}>
+                          Affects how spread moves are calculated.
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <span style={{ color: '#68d391', fontWeight: 700 }}>Doubles</span> — spread moves (e.g. Rock Slide, Earthquake, Heat Wave) deal <strong>×0.75</strong> damage. A "Spread" chip appears on these moves.
+                        </div>
+                        <div>
+                          <span style={{ color: '#f6ad55', fontWeight: 700 }}>Singles</span> — spread moves deal full damage, no penalty applied.
+                        </div>
+                      </div>
+                    }
+                    maxWidth={280}
+                    side="bottom"
+                  >
+                    <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1.5px solid #ddd', cursor: 'pointer' }}>
+                      {(['singles', 'doubles'] as const).map(fmt => {
+                        const active = fmt === (isDoubles ? 'doubles' : 'singles');
+                        return (
+                          <button
+                            key={fmt}
+                            onClick={() => setIsDoubles(fmt === 'doubles')}
+                            style={{
+                              padding: '6px 14px', fontSize: '13px', fontWeight: 700,
+                              border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+                              background: active ? '#2b6cb0' : '#fff',
+                              color: active ? '#fff' : '#aaa',
+                            }}
+                          >
+                            {fmt.charAt(0).toUpperCase() + fmt.slice(1)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Tooltip>
+
+                  {/* Champions toggle */}
+                  <button
+                    onClick={() => setChampionsOnly(v => !v)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '7px',
+                      padding: '6px 14px',
+                      border: `1.5px solid ${championsOnly ? '#553c9a' : '#ddd'}`,
+                      borderRadius: '8px',
+                      background: championsOnly ? '#f3f0ff' : '#fff',
+                      color: championsOnly ? '#553c9a' : '#888',
+                      fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <span>🏆</span>
+                    <span>Pokémon Champions</span>
                     <span style={{
-                      position: 'absolute', top: '2px',
-                      left: championsOnly ? '14px' : '2px',
-                      width: '12px', height: '12px', borderRadius: '50%',
-                      background: '#fff', transition: 'left 0.15s',
-                    }} />
-                  </span>
-                </button>
+                      width: '28px', height: '16px', borderRadius: '999px',
+                      background: championsOnly ? '#553c9a' : '#ddd',
+                      position: 'relative', flexShrink: 0, transition: 'background 0.15s',
+                    }}>
+                      <span style={{
+                        position: 'absolute', top: '2px',
+                        left: championsOnly ? '14px' : '2px',
+                        width: '12px', height: '12px', borderRadius: '50%',
+                        background: '#fff', transition: 'left 0.15s',
+                      }} />
+                    </span>
+                  </button>
+                </div>
               </div>
 
               {/* Target grid */}
@@ -286,11 +374,15 @@ export default function App() {
                     evs={slot.evs}
                     mustOutspeed={slot.mustOutspeed}
                     heldItem={slot.heldItem}
+                    reflect={slot.reflect}
+                    lightScreen={slot.lightScreen}
                     onSelect={p => updateSlot(slot.id, { pokemon: p, evs: { ...DEFAULT_EVS } })}
                     onRemove={slots.length > 1 ? () => removeSlot(slot.id) : undefined}
                     onEvsChange={evs => updateSlot(slot.id, { evs })}
                     onMustOutspeedChange={v => updateSlot(slot.id, { mustOutspeed: v })}
                     onHeldItemChange={item => updateSlot(slot.id, { heldItem: item })}
+                    onReflectChange={v => updateSlot(slot.id, { reflect: v })}
+                    onLightScreenChange={v => updateSlot(slot.id, { lightScreen: v })}
                     data={data!}
                   />
                 ))}
@@ -354,6 +446,7 @@ export default function App() {
                   onMinAccuracyChange={setMinAccuracy}
                   weather={weather}
                   onWeatherChange={setWeather}
+                  isDoubles={isDoubles}
                 />
               </div>
             )}
@@ -406,18 +499,22 @@ const HELD_ITEM_GROUPS: { label: string; items: typeof TARGET_HELD_ITEMS }[] = [
   },
 ];
 
-function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, onSelect, onRemove, onEvsChange, onMustOutspeedChange, onHeldItemChange, data }: {
+function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, reflect, lightScreen, onSelect, onRemove, onEvsChange, onMustOutspeedChange, onHeldItemChange, onReflectChange, onLightScreenChange, data }: {
   label: string;
   pokemon: Pokemon[];
   selected: Pokemon | null;
   evs: EVSpread;
   mustOutspeed: boolean;
   heldItem: TargetHeldItem | null;
+  reflect: boolean;
+  lightScreen: boolean;
   onSelect: (p: Pokemon) => void;
   onRemove?: () => void;
   onEvsChange: (evs: EVSpread) => void;
   onMustOutspeedChange: (v: boolean) => void;
   onHeldItemChange: (item: TargetHeldItem | null) => void;
+  onReflectChange: (v: boolean) => void;
+  onLightScreenChange: (v: boolean) => void;
   data: GameData;
 }) {
   const hp  = selected ? calcHP(selected.stats.hp, evs.hp) : 0;
@@ -542,6 +639,42 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, on
             />
             Must outspeed {selected.name}
           </label>
+
+          {/* Screen toggles */}
+          <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+            {([
+              {
+                key: 'reflect',
+                label: '🛡 Reflect',
+                active: reflect,
+                onChange: onReflectChange,
+                activeColor: '#e53e3e',
+                tooltip: 'Reflect reduces physical damage taken — ×0.5 in singles, ×2/3 in doubles. Affects all physical move OHKO calculations for this target.',
+              },
+              {
+                key: 'lightScreen',
+                label: '✨ Light Screen',
+                active: lightScreen,
+                onChange: onLightScreenChange,
+                activeColor: '#d69e2e',
+                tooltip: 'Light Screen reduces special damage taken — ×0.5 in singles, ×2/3 in doubles. Affects all special move OHKO calculations for this target.',
+              },
+            ] as const).map(({ key, label, active, onChange, activeColor, tooltip }) => (
+              <Tooltip key={key} content={tooltip} side="bottom" maxWidth={220}>
+                <button
+                  onClick={() => onChange(!active)}
+                  style={{
+                    flex: 1, fontSize: '11px', fontWeight: 700, padding: '4px 6px',
+                    border: `1px solid ${active ? activeColor : '#ddd'}`,
+                    borderRadius: '5px', cursor: 'pointer',
+                    background: active ? activeColor : '#fff',
+                    color: active ? '#fff' : '#888',
+                    transition: 'all 0.15s',
+                  }}
+                >{label}</button>
+              </Tooltip>
+            ))}
+          </div>
         </div>
       )}
     </div>
