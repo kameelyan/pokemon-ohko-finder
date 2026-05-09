@@ -1343,7 +1343,7 @@ function BattlegroundDropdown({
   const activeCount = (weather !== 'none' ? 1 : 0) + (terrain !== 'none' ? 1 : 0) + (fairyAura ? 1 : 0) + (gravity ? 1 : 0);
 
   const TERRAINS: { key: Terrain; label: string; icon: string }[] = [
-    { key: 'none',     label: 'None',     icon: '—'  },
+    { key: 'none',     label: 'None',     icon: ''   },
     { key: 'electric', label: 'Electric', icon: '⚡' },
     { key: 'grassy',   label: 'Grassy',   icon: '🌿' },
     { key: 'misty',    label: 'Misty',    icon: '🌫️' },
@@ -1446,7 +1446,7 @@ function BattlegroundDropdown({
                       fontWeight: active ? 700 : 500,
                     }}
                   >
-                    {icon} {label}
+                    {icon ? `${icon} ` : ''}{label}
                   </button>
                 );
                 return info ? (
