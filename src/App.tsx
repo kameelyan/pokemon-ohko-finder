@@ -171,20 +171,40 @@ export default function App() {
       }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 800 }}>⚔ Pokémon OHKO Finder</h1>
+            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 800 }}>Pokémon OHKO Finder</h1>
             <p style={{ margin: '4px 0 0', opacity: 0.85, fontSize: '15px' }}>
               Find every Pokémon that can one-hit KO your targets in competitive play (Level 50)
             </p>
           </div>
-          <span style={{ opacity: 0.6, fontSize: '12px', fontWeight: 600, paddingTop: '4px' }}>
-            v{APP_VERSION}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+            <span style={{ opacity: 0.6, fontSize: '12px', fontWeight: 600 }}>
+              v{APP_VERSION}
+            </span>
+            <a
+              href="https://ko-fi.com/kameelyan"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                background: '#fff', color: '#c53030',
+                fontSize: '12px', fontWeight: 700,
+                padding: '5px 12px', borderRadius: '6px',
+                textDecoration: 'none', whiteSpace: 'nowrap',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+            >
+              ☕ Support on Ko-fi
+            </a>
+          </div>
         </div>
 
         {/* Tab bar */}
         <div style={{ display: 'flex', gap: '4px', marginTop: '20px' }}>
           {([
-            ['finder', '⚔ OHKO Finder'],
+            ['finder', 'OHKO Finder'],
             ['notes',  '📋 Release Notes'],
           ] as ['finder' | 'notes', string][]).map(([tab, label]) => (
             <button
