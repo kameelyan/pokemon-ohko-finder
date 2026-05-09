@@ -293,7 +293,7 @@ export default function App() {
             </span>
             <div style={{ display: 'flex', alignItems: 'stretch', gap: '8px' }}>
               <a
-                href="https://github.com/kameelyan/pokemon-counter"
+                href="https://github.com/kameelyan/pokemon-ohko-finder"
                 target="_blank"
                 rel="noopener noreferrer"
                 title="View on GitHub"
