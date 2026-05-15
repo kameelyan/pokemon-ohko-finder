@@ -570,14 +570,14 @@ export default function App() {
                           <span style={{ color: '#68d391', fontWeight: 700 }}>EVs</span> — Standard competitive (0–252, step 4, max 506 total)
                         </div>
                         <div>
-                          <span style={{ color: '#f6ad55', fontWeight: 700 }}>SPs</span> — Pokémon Champions (0–32 per stat, max 66 total). 1 SP = 8 EVs exactly.
+                          <span style={{ color: '#9f7aea', fontWeight: 700 }}>SPs</span> — Pokémon Champions (0–32 per stat, max 66 total). 1 SP = 8 EVs exactly.
                         </div>
                       </div>
                     }
                     maxWidth={280}
                     side="bottom"
                   >
-                    <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1.5px solid #ddd', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: `1.5px solid ${statMode === 'sp' ? '#553c9a' : '#ddd'}`, cursor: 'pointer' }}>
                       {(['ev', 'sp'] as const).map(mode => {
                         const active = mode === statMode;
                         return (
@@ -614,7 +614,7 @@ export default function App() {
                             style={{
                               padding: '6px 14px', fontSize: '13px', fontWeight: 700,
                               border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-                              background: active ? '#d69e2e' : '#fff',
+                              background: active ? '#553c9a' : '#fff',
                               color: active ? '#fff' : '#aaa',
                             }}
                           >
