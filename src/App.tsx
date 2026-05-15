@@ -705,7 +705,6 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
       background: '#fafafa',
       position: 'relative',
       minWidth: 0,
-      overflow: 'hidden',
     }}>
       {/* Remove slot button */}
       {onRemove && (
