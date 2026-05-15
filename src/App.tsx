@@ -689,6 +689,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
   data: GameData;
 }) {
   const hp  = selected ? calcHP(selected.stats.hp, evs.hp) : 0;
+  const atk = selected ? calcStat(selected.stats.atk, evs.atk, 31, 50, getNatureMult(nature, 'atk')) : 0;
   const def = selected ? calcStat(selected.stats.def, evs.def, 31, 50, getNatureMult(nature, 'def')) : 0;
   const spd = selected ? calcStat(selected.stats.spd, evs.spd, 31, 50, getNatureMult(nature, 'spd')) : 0;
   const baseSpe = selected ? calcStat(selected.stats.spe, evs.spe, 31, 50, getNatureMult(nature, 'spe')) : 0;
@@ -749,6 +750,21 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                 <div style={{ color: '#68d391', fontWeight: 700 }}>→ {hp} HP</div>
               </div>
             } />
+            {(() => {
+              const atkNatMult = getNatureMult(nature, 'atk');
+              const atkNatLabel = atkNatMult === 1.1 ? '+10% (boosted)' : atkNatMult === 0.9 ? '−10% (reduced)' : 'neutral';
+              return (
+                <StatPill label="Atk" base={selected.stats.atk} computed={atk} tooltip={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: '5px' }}>Attack Stat at Lv. 50</div>
+                    <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.atk} · EVs: {evs.atk} · IVs: 31</div>
+                    <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {atkNatLabel}</div>
+                    <div style={{ color: '#68d391', fontWeight: 700 }}>→ {atk} Attack</div>
+                    <div style={{ color: '#aaa', marginTop: '4px', fontSize: '11px' }}>Used by Foul Play when this Pokémon is the target.</div>
+                  </div>
+                } />
+              );
+            })()}
             {(() => {
               const defNatMult = getNatureMult(nature, 'def');
               const defNatLabel = defNatMult === 1.1 ? '+10% (boosted)' : defNatMult === 0.9 ? '−10% (reduced)' : 'neutral';
