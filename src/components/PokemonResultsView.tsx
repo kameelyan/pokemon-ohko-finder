@@ -714,7 +714,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
         {sortedResults.map(result => {
           const { pokemon, movesPerTarget, allGuaranteed } = result;
           const isMega = pokemon.identifier.includes('-mega');
@@ -734,6 +734,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
                 border: `1px solid ${allGuaranteed ? '#c6f6d5' : '#fef3c7'}`,
                 borderRadius: '10px',
                 background: '#fff',
+                minWidth: 0,
+                overflow: 'hidden',
               }}
             >
               {/* Clickable header */}
