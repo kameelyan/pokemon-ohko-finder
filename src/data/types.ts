@@ -58,5 +58,5 @@ export interface GameData {
   pokemonMoves: Map<number, Set<number>>; // pokemonId -> Set<moveId>
   typeEfficacy: Map<string, number>; // `${atkType}-${defType}` -> factor
   typeNames: Map<number, string>;
-  championsRoster: Set<number>; // species IDs available in Pokémon Champions
+  championsRoster: Set<number>; // Pokémon IDs (form-level) available in Pokémon Champions
 }

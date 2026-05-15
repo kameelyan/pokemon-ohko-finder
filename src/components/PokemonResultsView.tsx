@@ -326,7 +326,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
         }
       }
 
-      if (championsOnly && !data.championsRoster.has(r.pokemon.speciesId)) return false;
+      if (championsOnly && !data.championsRoster.has(r.pokemon.id)) return false;
 
       return true;
     });

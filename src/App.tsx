@@ -240,7 +240,7 @@ export default function App() {
   // When Champions mode is on, restrict the search list to roster Pokémon only
   const searchablePokemon = useMemo(() => {
     if (!data || !championsOnly) return pokemonList;
-    return pokemonList.filter(p => data.championsRoster.has(p.speciesId));
+    return pokemonList.filter(p => data.championsRoster.has(p.id));
   }, [pokemonList, championsOnly, data]);
 
   // Slots with a selected Pokémon
