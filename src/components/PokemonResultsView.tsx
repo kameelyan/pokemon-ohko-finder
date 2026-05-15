@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { PokemonOHKOResult, OHKOMoveInfo, Weather, Terrain } from '../calc/damage';
-import { WEATHER_INFO, TERRAIN_INFO, FOUL_PLAY_MOVE_ID } from '../calc/damage';
+import { WEATHER_INFO, TERRAIN_INFO, FOUL_PLAY_MOVE_ID, BODY_PRESS_MOVE_ID, PSYSHOCK_MOVE_IDS } from '../calc/damage';
 import type { MoveFlag } from '../data/types';
-import { calcStat } from '../calc/damage';
+import { calcStat, stageMult } from '../calc/damage';
 import type { GameData, Pokemon } from '../data/types';
 import TypeBadge from './TypeBadge';
 import Tooltip from './Tooltip';
@@ -79,6 +79,7 @@ interface Props {
   targetNames: string[];
   targetSpeeds: number[];
   mustOutspeedSpeeds: number[];
+  targetsMustOutspeed: boolean[];
   championsOnly: boolean;
   data: GameData;
   showPossible: boolean;
@@ -93,6 +94,14 @@ interface Props {
   onTerrainChange: (t: Terrain) => void;
   fairyAura: boolean;
   onFairyAuraChange: (v: boolean) => void;
+  atkStage: number;
+  onAtkStageChange: (v: number) => void;
+  spaStage: number;
+  onSpaStageChange: (v: number) => void;
+  atkDefStage: number;
+  onAtkDefStageChange: (v: number) => void;
+  atkSpeStage: number;
+  onAtkSpeStageChange: (v: number) => void;
   isDoubles: boolean;
 }
 
@@ -222,16 +231,16 @@ function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boole
  * outspeed `targetSpeed` at L50 with the given nature multiplier, or null if
  * even 252 EVs cannot achieve it.
  */
-function minSpeedEVs(baseSpe: number, targetSpeed: number, natureMult: number): number | null {
+function minSpeedEVs(baseSpe: number, targetSpeed: number, natureMult: number, atkStageMult = 1.0): number | null {
   for (let ev = 0; ev <= 252; ev += 4) {
-    if (calcStat(baseSpe, ev, 31, 50, natureMult) > targetSpeed) return ev;
+    if (Math.floor(calcStat(baseSpe, ev, 31, 50, natureMult) * atkStageMult) > targetSpeed) return ev;
   }
   return null;
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export default function PokemonResultsView({ title, results, targetNames, targetSpeeds, mustOutspeedSpeeds, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, gravity, onGravityChange, terrain, onTerrainChange, fairyAura, onFairyAuraChange, isDoubles }: Props) {
+export default function PokemonResultsView({ title, results, targetNames, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, gravity, onGravityChange, terrain, onTerrainChange, fairyAura, onFairyAuraChange, atkStage, onAtkStageChange, spaStage, onSpaStageChange, atkDefStage, onAtkDefStageChange, atkSpeStage, onAtkSpeStageChange, isDoubles }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -256,9 +265,10 @@ export default function PokemonResultsView({ title, results, targetNames, target
   // Apply filters
   const filteredResults = useMemo(() => {
     return results.filter(r => {
-      const spe    = calcStat(r.pokemon.stats.spe, 0);
-      // Max reachable speed: 252 EVs + ×1.1 (+Spe nature) at L50
-      const maxSpe = calcStat(r.pokemon.stats.spe, 252, 31, 50, 1.1);
+      const atkSpeMult = stageMult(atkSpeStage);
+      const spe    = Math.floor(calcStat(r.pokemon.stats.spe, 0) * atkSpeMult);
+      // Max reachable speed: 252 EVs + ×1.1 (+Spe nature) at L50, with stage
+      const maxSpe = Math.floor(calcStat(r.pokemon.stats.spe, 252, 31, 50, 1.1) * atkSpeMult);
 
       if (filters.types.size > 0 && !r.pokemon.typeIds.some(t => filters.types.has(t))) return false;
 
@@ -305,11 +315,19 @@ export default function PokemonResultsView({ title, results, targetNames, target
           moves.some(m => !m.move.flags.some(f => filters.excludedFlags.has(f)))
         )) return false;
       }
+
+      // Must-outspeed: exclude Pokémon that only have negative-priority moves for any must-outspeed target
+      if (targetsMustOutspeed.some(Boolean)) {
+        for (let ti = 0; ti < r.movesPerTarget.length; ti++) {
+          if (targetsMustOutspeed[ti] && !r.movesPerTarget[ti].some(m => m.move.priority >= 0)) return false;
+        }
+      }
+
       if (championsOnly && !data.championsRoster.has(r.pokemon.speciesId)) return false;
 
       return true;
     });
-  }, [results, filters, targetSpeeds, mustOutspeedSpeeds, championsOnly]);
+  }, [results, filters, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly]);
 
   const sortedResults = useMemo(() => {
     const arr = [...filteredResults];
@@ -448,6 +466,16 @@ export default function PokemonResultsView({ title, results, targetNames, target
 
         {/* Battle Effects + Filters + expand/collapse — far right */}
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <StatChangesDropdown
+            atkStage={atkStage}
+            onAtkStageChange={onAtkStageChange}
+            spaStage={spaStage}
+            onSpaStageChange={onSpaStageChange}
+            atkDefStage={atkDefStage}
+            onAtkDefStageChange={onAtkDefStageChange}
+            atkSpeStage={atkSpeStage}
+            onAtkSpeStageChange={onAtkSpeStageChange}
+          />
           <BattlegroundDropdown
             weather={weather}
             onWeatherChange={onWeatherChange}
@@ -457,6 +485,10 @@ export default function PokemonResultsView({ title, results, targetNames, target
             onFairyAuraChange={onFairyAuraChange}
             gravity={gravity}
             onGravityChange={onGravityChange}
+            atkStage={atkStage}
+            onAtkStageChange={onAtkStageChange}
+            spaStage={spaStage}
+            onSpaStageChange={onSpaStageChange}
           />
           <button
             onClick={() => setFiltersOpen(v => !v)}
@@ -471,7 +503,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
             {activeFilterCount > 0 && (
               <Tooltip content="Clear all active filters" side="top">
                 <span
-                  onClick={e => { e.stopPropagation(); setFilters(EMPTY_FILTERS); onMinAccuracyChange(0); onShowPossibleChange(false); onWeatherChange('none'); }}
+                  onClick={e => { e.stopPropagation(); setFilters(EMPTY_FILTERS); onMinAccuracyChange(0); onShowPossibleChange(false); }}
                   style={{ color: '#e53e3e', fontWeight: 800, lineHeight: 1, padding: '0 2px' }}
                 >✕</span>
               </Tooltip>
@@ -723,7 +755,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
           const isMega = pokemon.identifier.includes('-mega');
           const isExpanded = expandedIds.has(pokemon.id);
           const typeNames = pokemon.typeIds.map(tid => data.typeNames.get(tid) ?? '?');
-          const attackerSpe = calcStat(pokemon.stats.spe, 0);
+          const attackerSpe = Math.floor(calcStat(pokemon.stats.spe, 0) * stageMult(atkSpeStage));
 
           const moveCounts = movesPerTarget.map(moves => ({
             guaranteed: moves.filter(m => m.isGuaranteed).length,
@@ -789,16 +821,91 @@ export default function PokemonResultsView({ title, results, targetNames, target
                     {typeNames.map(t => <TypeBadge key={t} typeName={t} />)}
                   </div>
 
-                  <StatChip label="Atk" value={pokemon.stats.atk} />
-                  <StatChip label="SpA" value={pokemon.stats.spa} />
+                  {/* Atk chip */}
+                  {(() => {
+                    const uninvestedAtk = calcStat(pokemon.stats.atk, 0);
+                    const effectiveAtk = Math.floor(uninvestedAtk * stageMult(atkStage));
+                    return (
+                      <Tooltip
+                        content={
+                          <div>
+                            <div style={{ fontWeight: 700, marginBottom: '7px' }}>Attack (uninvested L50)</div>
+                            <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.atk} · EVs: 0 · IVs: 31</div>
+                            <div style={{ color: '#68d391', fontWeight: 700, marginBottom: atkStage !== 0 ? '2px' : '0' }}>→ {uninvestedAtk} Atk</div>
+                            {atkStage !== 0 && (
+                              <div style={{ color: atkStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700 }}>
+                                Stage {atkStage > 0 ? `+${atkStage}` : atkStage}: → {effectiveAtk} effective
+                              </div>
+                            )}
+                          </div>
+                        }
+                        maxWidth={220}
+                      >
+                        <span style={{
+                          background: '#f0f0f0', borderRadius: '5px', padding: '2px 7px',
+                          fontSize: '12px', fontWeight: 600, cursor: 'help',
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        }}>
+                          Atk <span style={{ color: '#333' }}>{pokemon.stats.atk}</span>
+                          {atkStage !== 0 && (
+                            <span style={{ color: '#999', fontWeight: 400 }}>({effectiveAtk})</span>
+                          )}
+                        </span>
+                      </Tooltip>
+                    );
+                  })()}
+
+                  {/* SpA chip */}
+                  {(() => {
+                    const uninvestedSpa = calcStat(pokemon.stats.spa, 0);
+                    const effectiveSpa = Math.floor(uninvestedSpa * stageMult(spaStage));
+                    return (
+                      <Tooltip
+                        content={
+                          <div>
+                            <div style={{ fontWeight: 700, marginBottom: '7px' }}>Sp. Atk (uninvested L50)</div>
+                            <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.spa} · EVs: 0 · IVs: 31</div>
+                            <div style={{ color: '#68d391', fontWeight: 700, marginBottom: spaStage !== 0 ? '2px' : '0' }}>→ {uninvestedSpa} SpA</div>
+                            {spaStage !== 0 && (
+                              <div style={{ color: spaStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700 }}>
+                                Stage {spaStage > 0 ? `+${spaStage}` : spaStage}: → {effectiveSpa} effective
+                              </div>
+                            )}
+                          </div>
+                        }
+                        maxWidth={220}
+                      >
+                        <span style={{
+                          background: '#f0f0f0', borderRadius: '5px', padding: '2px 7px',
+                          fontSize: '12px', fontWeight: 600, cursor: 'help',
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        }}>
+                          SpA <span style={{ color: '#333' }}>{pokemon.stats.spa}</span>
+                          {spaStage !== 0 && (
+                            <span style={{ color: '#999', fontWeight: 400 }}>({effectiveSpa})</span>
+                          )}
+                        </span>
+                      </Tooltip>
+                    );
+                  })()}
 
                   {/* Speed chip */}
+                  {(() => {
+                    const uninvestedSpe = calcStat(pokemon.stats.spe, 0);
+                    return (
                   <Tooltip
                     content={
                       <div>
                         <div style={{ fontWeight: 700, marginBottom: '7px' }}>
                           Speed (uninvested L50){filters.trickRoom && <span style={{ marginLeft: '6px', color: '#b794f4', fontSize: '10px' }}>🔮 Trick Room</span>}
                         </div>
+                        <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.spe} · EVs: 0 · IVs: 31</div>
+                        <div style={{ color: '#68d391', fontWeight: 700, marginBottom: atkSpeStage !== 0 ? '2px' : '7px' }}>→ {uninvestedSpe} Speed</div>
+                        {atkSpeStage !== 0 && (
+                          <div style={{ color: atkSpeStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginBottom: '7px' }}>
+                            Stage {atkSpeStage > 0 ? `+${atkSpeStage}` : atkSpeStage}: → {attackerSpe} effective
+                          </div>
+                        )}
                         {targetSpeeds.map((ts, i) => {
                           const attackerGoesFirst = filters.trickRoom ? attackerSpe < ts : attackerSpe > ts;
                           const tied = attackerSpe === ts;
@@ -842,6 +949,9 @@ export default function PokemonResultsView({ title, results, targetNames, target
                     }}>
                       {filters.trickRoom && <span style={{ fontSize: '10px' }}>🔮</span>}
                       Spe <span style={{ color: '#333' }}>{pokemon.stats.spe}</span>
+                      {atkSpeStage !== 0 && (
+                        <span style={{ color: '#999', fontWeight: 400 }}>({attackerSpe})</span>
+                      )}
                       {targetSpeeds.length > 0 && (() => {
                         // "good" = moves first = faster normally, slower in TR
                         const allGood = filters.trickRoom
@@ -858,6 +968,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
                       })()}
                     </span>
                   </Tooltip>
+                    );
+                  })()}
 
                   {/* Speed investment chip — only in normal (non-TR) mode with targets */}
                   {targetSpeeds.length > 0 && !filters.trickRoom && (() => {
@@ -865,8 +977,9 @@ export default function PokemonResultsView({ title, results, targetNames, target
                     // Already outspeeds at 0 EVs neutral → no chip
                     if (attackerSpe > worstTarget) return null;
 
-                    const evNeutral = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.0);
-                    const evPlus    = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.1);
+                    const atkSpeMult = stageMult(atkSpeStage);
+                    const evNeutral = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.0, atkSpeMult);
+                    const evPlus    = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.1, atkSpeMult);
 
                     // Cannot outspeed even at full investment → no chip
                     if (evNeutral === null && evPlus === null) return null;
@@ -889,8 +1002,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
                         <div style={{ fontWeight: 700, marginBottom: '7px' }}>Speed Investment Needed</div>
                         {targetSpeeds.map((ts, i) => {
                           const alreadyOutspeeds = attackerSpe > ts;
-                          const enN = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.0);
-                          const enP = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.1);
+                          const enN = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.0, stageMult(atkSpeStage));
+                          const enP = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.1, stageMult(atkSpeStage));
                           const cantAtAll = !alreadyOutspeeds && enN === null && enP === null;
                           return (
                             <div key={i} style={{ marginBottom: '6px' }}>
@@ -1005,9 +1118,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
                   {movesPerTarget.map((moves, ti) => (
                     <div
                       key={ti}
+                      className="ohko-target-col"
                       style={{
-                        flex: '1 1 300px',
-                        minWidth: 0,
                         borderRight: ti < movesPerTarget.length - 1 ? '1px solid #eee' : 'none',
                         padding: '12px 16px',
                       }}
@@ -1019,7 +1131,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
                         moves={moves.filter(m =>
                           (!filters.noItem || !m.item) &&
                           (!filters.noEvs  || m.evNeeded === 0) &&
-                          (!isMega         || !m.item)
+                          (!isMega         || !m.item) &&
+                          (!targetsMustOutspeed[ti] || m.move.priority >= 0)
                         )}
                         data={data}
                         totalTargets={movesPerTarget.length}
@@ -1046,11 +1159,12 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
   isDoubles: boolean;
 }) {
   return (
-    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '520px' }}>
+    <div className="ohko-scroll-x">
+    <table className="ohko-move-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
       <thead>
         <tr style={{ borderBottom: '1px solid #eee' }}>
           <th style={th}>Move</th>
+          <th style={th}>Tags</th>
           <th style={{ ...th, textAlign: 'center', width: '28px' }}></th>
           <th style={th}>Type</th>
           <th style={{ ...th, textAlign: 'center' }}>BP</th>
@@ -1069,7 +1183,7 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
           const maxPct = Math.round(m.maxDamage / m.targetHP * 100);
           return (
             <tr key={m.move.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
-              <td style={{ ...td, fontWeight: 600 }}>
+              <td style={{ ...td, fontWeight: 600, whiteSpace: 'nowrap' }}>
                 {/* Move name with description tooltip */}
                 <Tooltip
                   content={m.move.description ? <>{m.move.description}</> : null}
@@ -1102,121 +1216,163 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
                     </span>
                   </Tooltip>
                 )}
-                {/* Flag chips */}
-                {m.move.flags.map(flag => (
-                  <Tooltip key={flag} content={FLAG_INFO[flag]?.description ?? flag} side="bottom">
-                    <span style={{
-                      marginLeft: '4px', fontSize: '10px', fontWeight: 600, cursor: 'help',
-                      background: FLAG_INFO[flag]?.bg ?? '#e2e8f0',
-                      color: FLAG_INFO[flag]?.color ?? '#4a5568',
-                      borderRadius: '3px', padding: '1px 4px',
-                    }}>
-                      {FLAG_INFO[flag]?.label ?? flag}
-                    </span>
-                  </Tooltip>
-                ))}
-                {/* Spread chip */}
-                {m.move.isSpread && (
-                  <Tooltip
-                    content={isDoubles
-                      ? 'Spread move — hits all adjacent foes. ×0.75 damage applied (doubles format).'
-                      : 'Spread move — hits all adjacent foes. No damage penalty in singles format.'}
-                    side="bottom"
-                  >
-                    <span style={{
-                      marginLeft: '4px', fontSize: '10px', fontWeight: 700, cursor: 'help',
-                      background: '#e0f2fe', color: '#075985',
-                      border: '1px solid #7dd3fc',
-                      borderRadius: '3px', padding: '1px 5px',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {isDoubles ? '↔ Spread ×0.75' : '↔ Spread'}
-                    </span>
-                  </Tooltip>
-                )}
-                {/* Weather chip — shown when weather was required for this OHKO */}
-                {m.weatherRequired && (() => {
-                  const wi = WEATHER_INFO[m.weatherRequired];
-                  return (
+              </td>
+
+              {/* Tags column — flags, spread, weather, Foul Play, ability, coverage */}
+              <td style={{ ...td, verticalAlign: 'middle' }}>
+                <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {/* Flag chips */}
+                  {m.move.flags.map(flag => (
+                    <Tooltip key={flag} content={FLAG_INFO[flag]?.description ?? flag} side="bottom">
+                      <span style={{
+                        fontSize: '10px', fontWeight: 600, cursor: 'help',
+                        background: FLAG_INFO[flag]?.bg ?? '#e2e8f0',
+                        color: FLAG_INFO[flag]?.color ?? '#4a5568',
+                        borderRadius: '3px', padding: '1px 4px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {FLAG_INFO[flag]?.label ?? flag}
+                      </span>
+                    </Tooltip>
+                  ))}
+                  {/* Spread chip */}
+                  {m.move.isSpread && (
                     <Tooltip
-                      content={`${wi.icon} ${wi.label} required — ${wi.description}`}
+                      content={isDoubles
+                        ? 'Spread move — hits all adjacent foes. ×0.75 damage applied (doubles format).'
+                        : 'Spread move — hits all adjacent foes. No damage penalty in singles format.'}
                       side="bottom"
                     >
                       <span style={{
-                        marginLeft: '4px', fontSize: '10px', fontWeight: 700, cursor: 'help',
-                        background: wi.bg, color: wi.color,
-                        border: `1px solid ${wi.color}`,
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#e0f2fe', color: '#075985',
+                        border: '1px solid #7dd3fc',
                         borderRadius: '3px', padding: '1px 5px',
                         whiteSpace: 'nowrap',
                       }}>
-                        {wi.icon} {wi.label}
+                        {isDoubles ? '↔ Spread ×0.75' : '↔ Spread'}
                       </span>
                     </Tooltip>
-                  );
-                })()}
-                {/* Foul Play chip — shows the target's Attack stat used in the calculation */}
-                {m.move.id === FOUL_PLAY_MOVE_ID && m.foulPlayAtk !== undefined && (
-                  <Tooltip
-                    content={`Foul Play uses the target's Attack stat (${m.foulPlayAtk}), not the attacker's.`}
-                    side="bottom"
-                  >
-                    <span style={{
-                      marginLeft: '4px', fontSize: '10px', fontWeight: 700, cursor: 'help',
-                      background: '#faf5ff', color: '#553c9a',
-                      border: '1px solid #b794f4',
-                      borderRadius: '3px', padding: '1px 5px',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      ↩ Atk: {m.foulPlayAtk}
-                    </span>
-                  </Tooltip>
-                )}
-                {/* Ability chip — shown when an ability modifier is factored into this move's damage */}
-                {m.abilityMod && (
-                  <Tooltip
-                    content={`${m.abilityMod.name} is required to achieve this OHKO${m.abilityMod.isHidden ? ' (Hidden Ability)' : ''}`}
-                    side="bottom"
-                  >
-                    <span style={{
-                      marginLeft: '4px', fontSize: '10px', fontWeight: 700, cursor: 'help',
-                      background: '#fffbeb', color: '#92400e',
-                      border: '1px solid #f6ad55',
-                      borderRadius: '3px', padding: '1px 5px',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      ★ {m.abilityMod.name}
-                    </span>
-                  </Tooltip>
-                )}
-                {totalTargets > 1 && m.coveredTargetIndices.length > 1 && (
-                  <Tooltip
-                    content={
-                      <div>
-                        <div style={{ fontWeight: 700, marginBottom: '4px' }}>
-                          KOs {m.coveredTargetIndices.length === totalTargets ? 'all' : m.coveredTargetIndices.length} targets
+                  )}
+                  {/* Weather chip */}
+                  {m.weatherRequired && (() => {
+                    const wi = WEATHER_INFO[m.weatherRequired];
+                    return (
+                      <Tooltip
+                        content={`${wi.icon} ${wi.label} required — ${wi.description}`}
+                        side="bottom"
+                      >
+                        <span style={{
+                          fontSize: '10px', fontWeight: 700, cursor: 'help',
+                          background: wi.bg, color: wi.color,
+                          border: `1px solid ${wi.color}`,
+                          borderRadius: '3px', padding: '1px 5px',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {wi.icon} {wi.label}
+                        </span>
+                      </Tooltip>
+                    );
+                  })()}
+                  {/* Body Press chip — uses attacker's Defense as offensive stat */}
+                  {m.move.id === BODY_PRESS_MOVE_ID && (
+                    <Tooltip
+                      content="Body Press deals damage based on the attacker's Defense stat, not Attack."
+                      side="bottom"
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#ebf8ff', color: '#2b6cb0',
+                        border: '1px solid #90cdf4',
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        ⬡ Uses Def
+                      </span>
+                    </Tooltip>
+                  )}
+                  {/* Psyshock/Psystrike/Secret Sword chip — hits target's Defense */}
+                  {PSYSHOCK_MOVE_IDS.has(m.move.id) && (
+                    <Tooltip
+                      content="This special move deals damage based on the target's Defense stat, not Sp. Defense."
+                      side="bottom"
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#faf5ff', color: '#553c9a',
+                        border: '1px solid #b794f4',
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        ⬡ Hits Def
+                      </span>
+                    </Tooltip>
+                  )}
+                  {/* Foul Play chip */}
+                  {m.move.id === FOUL_PLAY_MOVE_ID && m.foulPlayAtk !== undefined && (
+                    <Tooltip
+                      content={`Foul Play uses the target's Attack stat (${m.foulPlayAtk}), not the attacker's.`}
+                      side="bottom"
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#faf5ff', color: '#553c9a',
+                        border: '1px solid #b794f4',
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        ↩ Atk: {m.foulPlayAtk}
+                      </span>
+                    </Tooltip>
+                  )}
+                  {/* Ability chip */}
+                  {m.abilityMod && (
+                    <Tooltip
+                      content={`${m.abilityMod.name} is required to achieve this OHKO${m.abilityMod.isHidden ? ' (Hidden Ability)' : ''}`}
+                      side="bottom"
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#fffbeb', color: '#92400e',
+                        border: '1px solid #f6ad55',
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        ★ {m.abilityMod.name}
+                      </span>
+                    </Tooltip>
+                  )}
+                  {/* Coverage chip */}
+                  {totalTargets > 1 && m.coveredTargetIndices.length > 1 && (
+                    <Tooltip
+                      content={
+                        <div>
+                          <div style={{ fontWeight: 700, marginBottom: '4px' }}>
+                            KOs {m.coveredTargetIndices.length === totalTargets ? 'all' : m.coveredTargetIndices.length} targets
+                          </div>
+                          {m.coveredTargetIndices.map(i => (
+                            <div key={i} style={{ color: '#aaa' }}>• {targetNames[i]}</div>
+                          ))}
                         </div>
-                        {m.coveredTargetIndices.map(i => (
-                          <div key={i} style={{ color: '#aaa' }}>• {targetNames[i]}</div>
-                        ))}
-                      </div>
-                    }
-                  >
-                    <span style={{
-                      marginLeft: '5px',
-                      background: m.coveredTargetIndices.length === totalTargets ? '#6b46c1' : '#2b6cb0',
-                      color: '#fff',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      padding: '1px 5px',
-                      borderRadius: '4px',
-                      cursor: 'help',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {m.coveredTargetIndices.length === totalTargets ? '★ All targets' : `KOs ${m.coveredTargetIndices.length}`}
-                    </span>
-                  </Tooltip>
-                )}
+                      }
+                    >
+                      <span style={{
+                        background: m.coveredTargetIndices.length === totalTargets ? '#6b46c1' : '#2b6cb0',
+                        color: '#fff',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        cursor: 'help',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {m.coveredTargetIndices.length === totalTargets ? '★ All targets' : `KOs ${m.coveredTargetIndices.length}`}
+                      </span>
+                    </Tooltip>
+                  )}
+                </div>
               </td>
+
               {/* Dedicated held-item cell — larger icon, own column */}
               <td style={{ ...td, textAlign: 'center', padding: '5px 4px' }}>
                 {m.item && (
@@ -1255,7 +1411,11 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
                 <Tooltip
                   content={m.evNeeded === 0
                     ? 'No EV investment needed'
-                    : `Needs ${m.evNeeded} EVs in ${m.move.damageClassId === 2 ? 'Attack' : 'Sp. Atk'}`}
+                    : `Needs ${m.evNeeded} EVs in ${
+                        m.move.id === BODY_PRESS_MOVE_ID ? 'Defense'
+                        : m.move.damageClassId === 2 ? 'Attack'
+                        : 'Sp. Atk'
+                      }`}
                   side="bottom"
                 >
                   <span style={{
@@ -1469,6 +1629,93 @@ function ExcludeFormsDropdown({
               ✕ Show all forms
             </button>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Stat Changes dropdown ────────────────────────────────────────────────────
+
+function StatChangesDropdown({
+  atkStage, onAtkStageChange,
+  spaStage, onSpaStageChange,
+  atkDefStage, onAtkDefStageChange,
+  atkSpeStage, onAtkSpeStageChange,
+}: {
+  atkStage: number;
+  onAtkStageChange: (v: number) => void;
+  spaStage: number;
+  onSpaStageChange: (v: number) => void;
+  atkDefStage: number;
+  onAtkDefStageChange: (v: number) => void;
+  atkSpeStage: number;
+  onAtkSpeStageChange: (v: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const activeCount = (atkStage !== 0 ? 1 : 0) + (spaStage !== 0 ? 1 : 0) + (atkDefStage !== 0 ? 1 : 0) + (atkSpeStage !== 0 ? 1 : 0);
+
+  const sectionLabel: React.CSSProperties = {
+    fontSize: '10px', fontWeight: 700, textTransform: 'uppercase',
+    letterSpacing: '0.06em', color: '#aaa', marginBottom: '6px',
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          ...btnStyle,
+          background: open ? '#f0fff4' : '#fff',
+          borderColor: open ? '#68d391' : activeCount > 0 ? '#276749' : '#ddd',
+          color: open || activeCount > 0 ? '#276749' : '#555',
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+        }}
+      >
+        {activeCount > 0 && (
+          <Tooltip content="Reset all stat stages" side="top">
+            <span
+              onClick={e => { e.stopPropagation(); onAtkStageChange(0); onSpaStageChange(0); onAtkDefStageChange(0); onAtkSpeStageChange(0); }}
+              style={{ color: '#276749', fontWeight: 800, lineHeight: 1, padding: '0 2px' }}
+            >✕</span>
+          </Tooltip>
+        )}
+        Stat Changes
+        {activeCount > 0 && (
+          <span style={{
+            background: '#276749', color: '#fff',
+            borderRadius: '999px', fontSize: '10px', fontWeight: 700,
+            padding: '1px 6px', lineHeight: 1.4,
+          }}>{activeCount}</span>
+        )}
+        <span style={{ fontSize: '10px' }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 200,
+          background: '#fff', border: '1px solid #e2e8f0',
+          borderRadius: '10px', padding: '14px 16px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          minWidth: '180px',
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '32px 22px 36px 22px 16px', gap: '5px 6px', alignItems: 'center' }}>
+            <AttackerStageStepper label="Atk" value={atkStage} onChange={onAtkStageChange} />
+            <AttackerStageStepper label="Def" value={atkDefStage} onChange={onAtkDefStageChange} labelTooltip="Used by Body Press, which deals damage based on the attacker's Defense stat." />
+            <AttackerStageStepper label="SpA" value={spaStage} onChange={onSpaStageChange} />
+            <AttackerStageStepper label="Spe" value={atkSpeStage} onChange={onAtkSpeStageChange} />
+          </div>
         </div>
       )}
     </div>
@@ -1718,4 +1965,58 @@ const numInputStyle: React.CSSProperties = {
 const clearChipStyle: React.CSSProperties = {
   fontSize: '11px', padding: '2px 8px', border: '1px solid #ddd',
   borderRadius: '4px', background: '#fff', cursor: 'pointer', color: '#999',
+};
+
+function AttackerStageStepper({ label, value, onChange, labelTooltip }: { label: string; value: number; onChange: (v: number) => void; labelTooltip?: React.ReactNode }) {
+  const color = value > 0 ? '#276749' : value < 0 ? '#9b2c2c' : '#aaa';
+  const bg    = value > 0 ? '#f0fff4' : value < 0 ? '#fff5f5' : '#f7f7f7';
+  const labelEl = (
+    <span style={{ fontSize: '11px', color: '#888', fontWeight: 700, cursor: labelTooltip ? 'help' : 'default', borderBottom: labelTooltip ? '1px dashed #ccc' : 'none' }}>
+      {label}
+    </span>
+  );
+  // Returns a fragment — parent must be a CSS grid with 5 columns
+  return (
+    <>
+      {labelTooltip
+        ? <Tooltip content={labelTooltip} side="left" maxWidth={200}>{labelEl}</Tooltip>
+        : labelEl}
+      <button
+        onClick={() => onChange(Math.max(-6, value - 1))}
+        disabled={value <= -6}
+        style={{ ...stageStepBtnRV, opacity: value <= -6 ? 0.3 : 1 }}
+      >−</button>
+      <span style={{
+        fontSize: '12px', fontWeight: 700, color,
+        background: bg, borderRadius: '4px',
+        padding: '1px 0', textAlign: 'center',
+        border: `1px solid ${value !== 0 ? color : '#ddd'}`,
+      }}>
+        {value > 0 ? `+${value}` : value}
+      </span>
+      <button
+        onClick={() => onChange(Math.min(6, value + 1))}
+        disabled={value >= 6}
+        style={{ ...stageStepBtnRV, opacity: value >= 6 ? 0.3 : 1 }}
+      >+</button>
+      {value !== 0 ? (
+        <Tooltip content="Reset to 0" side="top">
+          <button
+            onClick={() => onChange(0)}
+            style={{ fontSize: '10px', color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '0', lineHeight: 1, justifySelf: 'center' }}
+          >✕</button>
+        </Tooltip>
+      ) : (
+        <span />
+      )}
+    </>
+  );
+}
+
+const stageStepBtnRV: React.CSSProperties = {
+  width: '22px', height: '22px', fontSize: '14px', fontWeight: 700,
+  border: '1px solid #ddd', borderRadius: '4px',
+  background: '#fff', cursor: 'pointer', color: '#555',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  padding: 0, lineHeight: 1,
 };

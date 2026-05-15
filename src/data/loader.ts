@@ -196,6 +196,7 @@ export async function loadGameData(): Promise<GameData> {
       description: moveDescriptions[id] ?? '',
       priority: Number(row.priority) || 0,
       flags: moveFlagsJson[String(id)] ?? [],
+      effectId: Number(row.effect_id) || 0,
       effectChance: row.effect_chance !== '' && row.effect_chance !== undefined
         ? Number(row.effect_chance) : null,
       isSpread: [9, 11].includes(Number(row.target_id)), // all-adjacent or all-adjacent-foes
