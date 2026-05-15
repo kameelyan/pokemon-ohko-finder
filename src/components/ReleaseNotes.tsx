@@ -5,6 +5,20 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.7.3',
+    date: 'May 2026',
+    title: 'EV Input Improvements',
+    sections: [
+      {
+        heading: '🎯 EV Quick-Set & Validation',
+        items: [
+          'Each EV input now has "min" and "max" text links below it — click to instantly set that stat to 0 or 252.',
+          'Total EVs across all five inputs are now validated against the 506 limit. If the total is exceeded, all inputs turn red with a warning message showing the current total.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.7.2',
     date: 'May 2026',
     title: 'Mobile Experience Improvements',

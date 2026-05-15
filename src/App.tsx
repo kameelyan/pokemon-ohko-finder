@@ -819,13 +819,26 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
             })()}
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <EVInput label="HP EVs"  value={evs.hp}  onChange={v => onEvsChange({ ...evs, hp: v })} />
-            <EVInput label="Atk EVs" value={evs.atk} onChange={v => onEvsChange({ ...evs, atk: v })} />
-            <EVInput label="Def EVs" value={evs.def} onChange={v => onEvsChange({ ...evs, def: v })} />
-            <EVInput label="SpD EVs" value={evs.spd} onChange={v => onEvsChange({ ...evs, spd: v })} />
-            <EVInput label="Spe EVs" value={evs.spe} onChange={v => onEvsChange({ ...evs, spe: v })} />
-          </div>
+          {(() => {
+            const totalEvs = evs.hp + evs.atk + evs.def + evs.spd + evs.spe;
+            const evError = totalEvs > 506;
+            return (
+              <>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <EVInput label="HP EVs"  value={evs.hp}  onChange={v => onEvsChange({ ...evs, hp: v })}  error={evError} />
+                  <EVInput label="Atk EVs" value={evs.atk} onChange={v => onEvsChange({ ...evs, atk: v })} error={evError} />
+                  <EVInput label="Def EVs" value={evs.def} onChange={v => onEvsChange({ ...evs, def: v })} error={evError} />
+                  <EVInput label="SpD EVs" value={evs.spd} onChange={v => onEvsChange({ ...evs, spd: v })} error={evError} />
+                  <EVInput label="Spe EVs" value={evs.spe} onChange={v => onEvsChange({ ...evs, spe: v })} error={evError} />
+                </div>
+                {evError && (
+                  <div style={{ fontSize: '11px', color: '#e53e3e', marginTop: '4px', fontWeight: 600 }}>
+                    Total EVs ({totalEvs}) exceeds the 506 limit
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* Nature */}
           <div style={{ marginTop: '10px' }}>
@@ -1074,15 +1087,19 @@ function AdditionalSettings({
   );
 }
 
-function EVInput({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function EVInput({ label, value, onChange, error }: { label: string; value: number; onChange: (v: number) => void; error?: boolean }) {
   return (
     <div style={{ flex: '1 1 56px', minWidth: '52px', maxWidth: '72px' }}>
-      <div style={{ fontSize: '10px', color: '#999', marginBottom: '2px' }}>{label}</div>
+      <div style={{ fontSize: '10px', color: error ? '#e53e3e' : '#999', marginBottom: '2px' }}>{label}</div>
       <input
         type="number" min={0} max={252} step={4} value={value}
         onChange={e => onChange(Math.min(252, Math.max(0, Number(e.target.value))))}
-        style={{ width: '100%', padding: '4px 6px', border: '1px solid #ddd', borderRadius: '5px', fontSize: '12px', background: '#fff' }}
+        style={{ width: '100%', padding: '4px 6px', border: `1px solid ${error ? '#e53e3e' : '#ddd'}`, borderRadius: '5px', fontSize: '12px', background: error ? '#fff5f5' : '#fff' }}
       />
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+        <span onClick={() => onChange(0)} style={{ fontSize: '9px', color: '#aaa', cursor: 'pointer', textDecoration: 'underline' }}>min</span>
+        <span onClick={() => onChange(252)} style={{ fontSize: '9px', color: '#aaa', cursor: 'pointer', textDecoration: 'underline' }}>max</span>
+      </div>
     </div>
   );
 }
