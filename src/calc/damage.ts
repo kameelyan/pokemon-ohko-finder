@@ -6,6 +6,11 @@ import type { GameData, Move, Pokemon } from '../data/types';
  */
 const GRAVITY_UNUSABLE_MOVE_IDS = new Set([19, 26, 136, 340, 507]);
 
+/**
+ * Foul Play uses the *target's* Attack stat instead of the attacker's.
+ */
+const FOUL_PLAY_MOVE_ID = 492;
+
 export interface EVSpread {
   hp: number;
   def: number;
@@ -293,6 +298,7 @@ function minEVsToOHKO(
 interface TargetStats {
   pokemon: Pokemon;
   hp: number;
+  atk: number;  // used by Foul Play
   def: number;
   spd: number;
   defMult: number;
@@ -369,20 +375,33 @@ function tryOHKO(
   const friendGuardMult = ts.friendGuard ? 0.75 : 1.0;
   const effectivePower = move.power * (abilityMod?.powerMult ?? 1.0) * weatherMult * terrainMult * fairyAuraMult * spreadMult * friendGuardMult;
 
-  let evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible);
+  // Foul Play uses the target's Attack stat — the attacker invests no EVs
+  const isFoulPlay = move.id === FOUL_PLAY_MOVE_ID;
+
+  let evNeeded: number | null;
   let item: HeldItem | undefined;
 
-  if (evNeeded === null) {
-    const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
-    if (typeItem) {
-      evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost);
-      if (evNeeded !== null) item = typeItem;
+  if (isFoulPlay) {
+    // Attack stat is fixed to the target's; just check if the damage lands
+    const { min, max } = damageSingle(effectivePower, ts.atk, defStat, stabFactor, effFactor, 1.0);
+    const lands = !showPossible ? min >= ts.hp : max >= ts.hp;
+    if (!lands) return null;
+    evNeeded = 0;
+  } else {
+    evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible);
+
+    if (evNeeded === null) {
+      const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
+      if (typeItem) {
+        evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost);
+        if (evNeeded !== null) item = typeItem;
+      }
     }
+
+    if (evNeeded === null) return null;
   }
 
-  if (evNeeded === null) return null;
-
-  const atkStat = calcStat(atkBase, evNeeded, 31, 50, 1.0);
+  const atkStat = isFoulPlay ? ts.atk : calcStat(atkBase, evNeeded, 31, 50, 1.0);
   const { min, max } = damageSingle(effectivePower, atkStat, defStat, stabFactor, effFactor, item?.boost ?? 1.0);
 
   return { evNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy };
@@ -404,6 +423,7 @@ export function findPokemonOHKOs(
   const targetStats: TargetStats[] = targets.map(t => ({
     pokemon: t.pokemon,
     hp: calcHP(t.pokemon.stats.hp, t.evs.hp),
+    atk: calcStat(t.pokemon.stats.atk, 0, 31, 50, 1.0),
     def: calcStat(t.pokemon.stats.def, t.evs.def, 31, 50, t.defNature ?? 1.0),
     spd: calcStat(t.pokemon.stats.spd, t.evs.spd, 31, 50, t.spdNature ?? 1.0),
     defMult: t.heldItem?.defMult ?? 1.0,
