@@ -268,7 +268,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
       }
 
       if (filters.noEvs && !r.movesPerTarget.every(moves => moves.some(m => m.evNeeded === 0))) return false;
-      if (filters.noItem && !r.movesPerTarget.every(moves => moves.some(m => !m.item))) return false;
+      const isMega = r.pokemon.identifier.includes('-mega');
+      if ((filters.noItem || isMega) && !r.movesPerTarget.every(moves => moves.some(m => !m.item))) return false;
       if (filters.defaultOnly && !r.pokemon.isDefault) return false;
       if (filters.excludedFlags.size > 0) {
         // Keep only Pokémon that have at least one OHKO move per target with none of the excluded flags
@@ -655,6 +656,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {sortedResults.map(result => {
           const { pokemon, movesPerTarget, allGuaranteed } = result;
+          const isMega = pokemon.identifier.includes('-mega');
           const isExpanded = expandedIds.has(pokemon.id);
           const typeNames = pokemon.typeIds.map(tid => data.typeNames.get(tid) ?? '?');
           const attackerSpe = calcStat(pokemon.stats.spe, 0);
@@ -950,7 +952,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
                       <MoveTable
                         moves={moves.filter(m =>
                           (!filters.noItem || !m.item) &&
-                          (!filters.noEvs  || m.evNeeded === 0)
+                          (!filters.noEvs  || m.evNeeded === 0) &&
+                          (!isMega         || !m.item)
                         )}
                         data={data}
                         totalTargets={movesPerTarget.length}
