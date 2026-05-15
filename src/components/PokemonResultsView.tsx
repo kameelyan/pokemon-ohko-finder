@@ -105,6 +105,7 @@ interface Props {
   choiceItem: 'band' | 'scarf' | 'specs' | null;
   onChoiceItemChange: (v: 'band' | 'scarf' | 'specs' | null) => void;
   isDoubles: boolean;
+  statMode: 'ev' | 'sp';
 }
 
 /** Full base-stat grid shown in the Pokémon header tooltip */
@@ -233,8 +234,8 @@ function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boole
  * outspeed `targetSpeed` at L50 with the given nature multiplier, or null if
  * even 252 EVs cannot achieve it.
  */
-function minSpeedEVs(baseSpe: number, targetSpeed: number, natureMult: number, atkStageMult = 1.0): number | null {
-  for (let ev = 0; ev <= 252; ev += 4) {
+function minSpeedEVs(baseSpe: number, targetSpeed: number, natureMult: number, atkStageMult = 1.0, step = 4, maxEV = 252): number | null {
+  for (let ev = 0; ev <= maxEV; ev += step) {
     if (Math.floor(calcStat(baseSpe, ev, 31, 50, natureMult) * atkStageMult) > targetSpeed) return ev;
   }
   return null;
@@ -242,7 +243,7 @@ function minSpeedEVs(baseSpe: number, targetSpeed: number, natureMult: number, a
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export default function PokemonResultsView({ title, results, targetNames, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, gravity, onGravityChange, terrain, onTerrainChange, fairyAura, onFairyAuraChange, atkStage, onAtkStageChange, spaStage, onSpaStageChange, atkDefStage, onAtkDefStageChange, atkSpeStage, onAtkSpeStageChange, choiceItem, onChoiceItemChange, isDoubles }: Props) {
+export default function PokemonResultsView({ title, results, targetNames, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, gravity, onGravityChange, terrain, onTerrainChange, fairyAura, onFairyAuraChange, atkStage, onAtkStageChange, spaStage, onSpaStageChange, atkDefStage, onAtkDefStageChange, atkSpeStage, onAtkSpeStageChange, choiceItem, onChoiceItemChange, isDoubles, statMode }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -709,7 +710,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
                   Show possible OHKOs (not just guaranteed)
                 </label>
                 {([
-                  ['noEvs', 'No EV investment required'],
+                  ['noEvs', statMode === 'sp' ? 'No SP investment required' : 'No EV investment required'],
                   ['noItem', 'No held item required'],
                   ['defaultOnly', 'Default forms only'],
                 ] as [keyof Filters, string][]).map(([key, label]) => (
@@ -834,7 +835,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
                         content={
                           <div>
                             <div style={{ fontWeight: 700, marginBottom: '7px' }}>Attack (uninvested L50)</div>
-                            <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.atk} · EVs: 0 · IVs: 31</div>
+                            <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.atk} · {statMode === 'sp' ? 'SPs: 0' : 'EVs: 0'} · IVs: 31</div>
                             <div style={{ color: '#68d391', fontWeight: 700, marginBottom: showEffective ? '2px' : '0' }}>→ {uninvestedAtk} Atk</div>
                             {atkStage !== 0 && (
                               <div style={{ color: atkStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginBottom: hasBand ? '2px' : '0' }}>
@@ -877,7 +878,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
                         content={
                           <div>
                             <div style={{ fontWeight: 700, marginBottom: '7px' }}>Sp. Atk (uninvested L50)</div>
-                            <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.spa} · EVs: 0 · IVs: 31</div>
+                            <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.spa} · {statMode === 'sp' ? 'SPs: 0' : 'EVs: 0'} · IVs: 31</div>
                             <div style={{ color: '#68d391', fontWeight: 700, marginBottom: showEffective ? '2px' : '0' }}>→ {uninvestedSpa} SpA</div>
                             {spaStage !== 0 && (
                               <div style={{ color: spaStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginBottom: hasSpecs ? '2px' : '0' }}>
@@ -922,7 +923,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
                         <div style={{ fontWeight: 700, marginBottom: '7px' }}>
                           Speed (uninvested L50){filters.trickRoom && <span style={{ marginLeft: '6px', color: '#b794f4', fontSize: '10px' }}>🔮 Trick Room</span>}
                         </div>
-                        <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.spe} · EVs: 0 · IVs: 31</div>
+                        <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.spe} · {statMode === 'sp' ? 'SPs: 0' : 'EVs: 0'} · IVs: 31</div>
                         <div style={{ color: '#68d391', fontWeight: 700, marginBottom: speModified ? '2px' : '7px' }}>→ {uninvestedSpe} Speed</div>
                         {atkSpeStage !== 0 && (
                           <div style={{ color: atkSpeStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginBottom: hasScarf ? '2px' : '7px' }}>
@@ -1006,21 +1007,30 @@ export default function PokemonResultsView({ title, results, targetNames, target
                     if (attackerSpe > worstTarget) return null;
 
                     const atkSpeMult = stageMult(atkSpeStage) * scarfMult;
-                    const evNeutral = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.0, atkSpeMult);
-                    const evPlus    = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.1, atkSpeMult);
+                    // In SP mode, step by 8 (= 1 SP) and allow up to 256 (= 32 SPs)
+                    const spStep = statMode === 'sp' ? 8 : 4;
+                    const spMax  = statMode === 'sp' ? 256 : 252;
+                    const evNeutral = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.0, atkSpeMult, spStep, spMax);
+                    const evPlus    = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.1, atkSpeMult, spStep, spMax);
 
                     // Cannot outspeed even at full investment → no chip
                     if (evNeutral === null && evPlus === null) return null;
 
+                    // Convert to display unit
+                    const toDisplay = (ev: number | null) => ev === null ? null : (statMode === 'sp' ? ev / 8 : ev);
+                    const dispNeutral = toDisplay(evNeutral);
+                    const dispPlus    = toDisplay(evPlus);
+                    const unit = statMode === 'sp' ? 'SPs' : 'EVs';
+
                     // Build chip label
                     let label: string;
-                    if (evNeutral !== null && evPlus !== null && evPlus < evNeutral) {
-                      label = `⚡ +${evNeutral} EVs · +Spe: ${evPlus} EVs`;
-                    } else if (evNeutral !== null) {
-                      label = `⚡ +${evNeutral} EVs`;
+                    if (dispNeutral !== null && dispPlus !== null && dispPlus < dispNeutral) {
+                      label = `⚡ +${dispNeutral} ${unit} · +Spe: ${dispPlus} ${unit}`;
+                    } else if (dispNeutral !== null) {
+                      label = `⚡ +${dispNeutral} ${unit}`;
                     } else {
-                      // evPlus !== null, evNeutral === null
-                      label = `⚡ +Spe: ${evPlus} EVs`;
+                      // dispPlus !== null, dispNeutral === null
+                      label = `⚡ +Spe: ${dispPlus} ${unit}`;
                     }
 
                     const onlyWithNature = evNeutral === null;
@@ -1030,8 +1040,10 @@ export default function PokemonResultsView({ title, results, targetNames, target
                         <div style={{ fontWeight: 700, marginBottom: '7px' }}>Speed Investment Needed</div>
                         {targetSpeeds.map((ts, i) => {
                           const alreadyOutspeeds = attackerSpe > ts;
-                          const enN = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.0, stageMult(atkSpeStage) * scarfMult);
-                          const enP = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.1, stageMult(atkSpeStage) * scarfMult);
+                          const enN = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.0, stageMult(atkSpeStage) * scarfMult, spStep, spMax);
+                          const enP = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.1, stageMult(atkSpeStage) * scarfMult, spStep, spMax);
+                          const dN = toDisplay(enN);
+                          const dP = toDisplay(enP);
                           const cantAtAll = !alreadyOutspeeds && enN === null && enP === null;
                           return (
                             <div key={i} style={{ marginBottom: '6px' }}>
@@ -1044,11 +1056,11 @@ export default function PokemonResultsView({ title, results, targetNames, target
                                 <div style={{ color: '#fc8181', fontWeight: 700, fontSize: '12px' }}>Cannot outspeed</div>
                               ) : (
                                 <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                                  {enN !== null && (
-                                    <div>{enN === 0 ? 'Already outspeeds (neutral)' : `${enN} EVs — neutral nature`}</div>
+                                  {dN !== null && (
+                                    <div>{dN === 0 ? `Already outspeeds (neutral)` : `${dN} ${unit} — neutral nature`}</div>
                                   )}
-                                  {enP !== null && enP !== enN && (
-                                    <div style={{ color: '#f6ad55' }}>{enP === 0 ? 'Already outspeeds (+Spe)' : `${enP} EVs — +Spe nature`}</div>
+                                  {dP !== null && dP !== dN && (
+                                    <div style={{ color: '#f6ad55' }}>{dP === 0 ? `Already outspeeds (+Spe)` : `${dP} ${unit} — +Spe nature`}</div>
                                   )}
                                 </div>
                               )}
@@ -1166,6 +1178,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
                         totalTargets={movesPerTarget.length}
                         targetNames={targetNames}
                         isDoubles={isDoubles}
+                        statMode={statMode}
                       />
                     </div>
                   ))}
@@ -1179,12 +1192,13 @@ export default function PokemonResultsView({ title, results, targetNames, target
   );
 }
 
-function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
+function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode }: {
   moves: OHKOMoveInfo[];
   data: GameData;
   totalTargets: number;
   targetNames: string[];
   isDoubles: boolean;
+  statMode: 'ev' | 'sp';
 }) {
   return (
     <div className="ohko-scroll-x">
@@ -1200,7 +1214,7 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
           <th style={{ ...th, textAlign: 'center' }}>Cat</th>
           <th style={{ ...th, textAlign: 'right' }}>Damage</th>
           <th style={{ ...th, textAlign: 'right' }}>% HP</th>
-          <th style={{ ...th, textAlign: 'center' }}>EVs</th>
+          <th style={{ ...th, textAlign: 'center' }}>{statMode === 'sp' ? 'SPs' : 'EVs'}</th>
           <th style={{ ...th, textAlign: 'center' }}>OHKO</th>
         </tr>
       </thead>
@@ -1453,25 +1467,31 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
                 {minPct}–{maxPct}%
               </td>
               <td style={{ ...td, textAlign: 'center' }}>
-                <Tooltip
-                  content={m.evNeeded === 0
-                    ? 'No EV investment needed'
-                    : `Needs ${m.evNeeded} EVs in ${
-                        m.move.id === BODY_PRESS_MOVE_ID ? 'Defense'
-                        : m.move.damageClassId === 2 ? 'Attack'
-                        : 'Sp. Atk'
-                      }`}
-                  side="bottom"
-                >
-                  <span style={{
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    cursor: 'help',
-                    color: m.evNeeded === 0 ? '#38a169' : m.evNeeded <= 128 ? '#d69e2e' : '#e53e3e',
-                  }}>
-                    {m.evNeeded === 0 ? '0' : m.evNeeded}
-                  </span>
-                </Tooltip>
+                {(() => {
+                  const dispVal = statMode === 'sp' ? m.evNeeded / 8 : m.evNeeded;
+                  const unit = statMode === 'sp' ? 'SPs' : 'EVs';
+                  const statLabel = m.move.id === BODY_PRESS_MOVE_ID ? 'Defense'
+                    : m.move.damageClassId === 2 ? 'Attack'
+                    : 'Sp. Atk';
+                  return (
+                    <Tooltip
+                      content={m.evNeeded === 0
+                        ? `No ${unit} investment needed`
+                        : `Needs ${dispVal} ${unit} in ${statLabel}`}
+                      side="bottom"
+                    >
+                      <span style={{
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        cursor: 'help',
+                        // midpoint is 128 EVs = 16 SPs; evNeeded is always in EV units internally
+                        color: m.evNeeded === 0 ? '#38a169' : m.evNeeded <= 128 ? '#d69e2e' : '#e53e3e',
+                      }}>
+                        {dispVal}
+                      </span>
+                    </Tooltip>
+                  );
+                })()}
               </td>
               <td style={{ ...td, textAlign: 'center' }}>
                 {m.isGuaranteed
