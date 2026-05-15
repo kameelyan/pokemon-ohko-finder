@@ -502,6 +502,9 @@ export default function PokemonResultsView({ title, results, targetNames, target
           display: 'flex',
           flexDirection: 'column',
           gap: '14px',
+          maxHeight: '70vh',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
         }}>
           {/* Row 1: Type */}
           <div>
