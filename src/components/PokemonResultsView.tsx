@@ -405,17 +405,18 @@ export default function PokemonResultsView({ title, results, targetNames, target
       {/* ── Controls bar: search + sort far-left · filters + expand far-right ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
         {/* Search + Sort — far left */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by Pokémon or move name…"
             style={{
-              width: '270px',
+              width: 'min(270px, 100%)',
               fontSize: '12px', padding: '5px 10px',
               border: '1px solid #ddd', borderRadius: '6px',
               background: '#fff', color: '#333', outline: 'none',
+              minWidth: 0,
             }}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
