@@ -23,7 +23,7 @@ const releases: {
       {
         heading: '♪ Round',
         items: [
-          'Round now correctly accounts for its power-doubling mechanic: if another Pokémon on the same team has already used Round that turn, its power doubles from 60 to 120.',
+          'Round now correctly accounts for its power-doubling mechanic: if any other Pokémon (ally or opponent) has already used Round that turn, its power doubles from 60 to 120.',
           'The tool first checks whether the base power (60) is enough to OHKO. If not, it checks the doubled power (120).',
           'When the doubled power is required, a purple "♪ Double Power" chip appears on the move row with a tooltip explaining the condition.',
         ],

@@ -1370,7 +1370,7 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                   {/* Round double-power chip */}
                   {m.move.id === ROUND_MOVE_ID && m.needsRoundBoost && (
                     <Tooltip
-                      content="Round's power doubles to 120 when another Pokémon on the same team has already used Round that turn. This OHKO requires the doubled power."
+                      content="Round's power doubles to 120 when any other Pokémon (ally or opponent) has already used Round that turn. This OHKO requires the doubled power."
                       side="bottom"
                       maxWidth={240}
                     >
