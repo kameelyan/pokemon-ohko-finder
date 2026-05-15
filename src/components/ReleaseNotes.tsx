@@ -5,6 +5,32 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.9.0',
+    date: 'May 2026',
+    title: 'Champions Stat Points (SP) Mode',
+    sections: [
+      {
+        heading: '🏆 Stat Points Mode',
+        items: [
+          'A new EV / SP toggle has been added next to the Pokémon Champions button. Switch to SPs to enter your investments in Pokémon Champions Stat Points instead of EVs.',
+          '1 SP equals exactly 8 EVs at Level 50 with 31 IVs — the conversion is lossless with no rounding. The full cap is 32 SPs per stat and 66 SPs total.',
+          'All EV inputs, stat pill tooltips, result table headers, EV-needed values, and speed investment chips update to reflect SPs when the mode is active.',
+          'A Sp. Atk SPs input appears in SP mode so the 66-SP total cap can be properly validated across all invested stats.',
+          'The toggle is styled in Champions purple and persists across page reloads.',
+        ],
+      },
+      {
+        heading: '🏆 Champions Roster Accuracy',
+        items: [
+          'The Champions roster has been rebuilt using form-level Pokémon IDs instead of species IDs, so alternate forms are now filtered precisely rather than showing all forms of any species in the game.',
+          'Explicitly excluded forms that are not available in Pokémon Champions: 13 Pikachu cap variants, Greninja-Ash, Greninja-Battle-Bond, Gourgeist size variants (Small/Large/Super), 4 totem forms, and 14 Gigantamax forms.',
+          'Added Arcanine and Lopunny, which were missing from the previous roster.',
+          'A tooltip on the Pokémon Champions toggle now explains what the filter does.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.8.1',
     date: 'May 2026',
     title: 'Choice Items',
@@ -474,54 +500,49 @@ const releases: {
   },
 ];
 
-const KNOWN_ISSUES: { heading: string; items: string[] }[] = [
-  {
-    heading: '🏆 Pokémon Champions Roster',
-    items: [
-      'The Pokémon Champions eligible Pokémon list is not 100% accurate — it is sourced from PokéAPI and may be missing recently added or updated entries.',
-    ],
-  },
-];
+const KNOWN_ISSUES: { heading: string; items: string[] }[] = [];
 
 export default function ReleaseNotes() {
   return (
     <div style={{ maxWidth: '760px', margin: '0 auto' }}>
-      {/* Known Issues */}
-      <div style={{
-        background: '#fff',
-        borderRadius: '12px',
-        padding: '28px 32px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
-        marginBottom: '24px',
-        borderLeft: '4px solid #f6ad55',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-          <span style={{
-            background: '#f6ad55', color: '#fff',
-            fontWeight: 800, fontSize: '13px',
-            borderRadius: '6px', padding: '2px 10px',
-            letterSpacing: '0.03em',
-          }}>
-            Known Issues
-          </span>
+      {/* Known Issues — only rendered when there are open issues */}
+      {KNOWN_ISSUES.length > 0 && (
+        <div style={{
+          background: '#fff',
+          borderRadius: '12px',
+          padding: '28px 32px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
+          marginBottom: '24px',
+          borderLeft: '4px solid #f6ad55',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+            <span style={{
+              background: '#f6ad55', color: '#fff',
+              fontWeight: 800, fontSize: '13px',
+              borderRadius: '6px', padding: '2px 10px',
+              letterSpacing: '0.03em',
+            }}>
+              Known Issues
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {KNOWN_ISSUES.map(section => (
+              <div key={section.heading}>
+                <h3 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 700, color: '#2d3748' }}>
+                  {section.heading}
+                </h3>
+                <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  {section.items.map((item, i) => (
+                    <li key={i} style={{ fontSize: '14px', color: '#4a5568', lineHeight: 1.6 }}>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {KNOWN_ISSUES.map(section => (
-            <div key={section.heading}>
-              <h3 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 700, color: '#2d3748' }}>
-                {section.heading}
-              </h3>
-              <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                {section.items.map((item, i) => (
-                  <li key={i} style={{ fontSize: '14px', color: '#4a5568', lineHeight: 1.6 }}>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       {releases.map((release, ri) => (
         <div
