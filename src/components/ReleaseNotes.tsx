@@ -5,6 +5,30 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.7.0',
+    date: 'May 2026',
+    title: 'Foul Play Support & Global Search',
+    sections: [
+      {
+        heading: '↩ Foul Play',
+        items: [
+          'Foul Play now correctly uses the target\'s Attack stat in damage calculations rather than the attacker\'s own Attack stat, matching the in-game mechanic.',
+          'Each target Pokémon panel now shows an Atk stat chip alongside HP, Def, SpD, and Spe — hover it to see the base stat, EV investment, nature modifier, and computed Lv. 50 value.',
+          'An Atk EVs input has been added to the target panel so you can set the exact Attack EVs on the target for accurate Foul Play calculations.',
+          'Foul Play move rows in the results display a purple "↩ Atk: X" chip showing the target\'s Attack stat used, with a tooltip explaining the mechanic.',
+        ],
+      },
+      {
+        heading: '🔍 Global Search',
+        items: [
+          'A search field now sits between the sort controls and the Battle Effects dropdown.',
+          'Type any Pokémon name or move name to filter results in real time — useful when you\'re looking for a specific attacker or want to check which Pokémon can OHKO with a particular move.',
+          'The search works alongside all existing filters — both are applied simultaneously.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.6.1',
     date: 'May 2026',
     title: 'Bug Fixes & Polish',
