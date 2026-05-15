@@ -5,6 +5,29 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.6.1',
+    date: 'May 2026',
+    title: 'Bug Fixes & Polish',
+    sections: [
+      {
+        heading: '🐛 Bug Fixes',
+        items: [
+          'Mega Pokémon now correctly exclude moves that require a held item — since their held item slot is always occupied by their Mega Stone, those moves are not viable and were misleading.',
+          'If all of a Mega Pokémon\'s OHKO paths require a held item, it is now omitted from results entirely rather than shown with an empty move list.',
+        ],
+      },
+      {
+        heading: '🎛 UI Polish',
+        items: [
+          'Terrain "None" option in the Battle Effects dropdown no longer shows a "—" icon, matching the style of Weather\'s "None" option.',
+          'A GitHub icon link has been added to the header next to the Ko-fi support button.',
+          'The "Additional Settings" collapsible in target panels has been renamed to "Additional Modifiers", and the inner "Speed Modifiers" sub-section is now just "Modifiers" since Friend Guard is not a speed modifier.',
+          'Stat chips now have slightly more vertical spacing when they wrap onto multiple lines.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.6.0',
     date: 'May 2026',
     title: 'Battle Effects, Per-Target Modifiers & UI Polish',
