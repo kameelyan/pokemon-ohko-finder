@@ -5,6 +5,55 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.8.0',
+    date: 'May 2026',
+    title: 'Stat Stages, Body Press & Psyshock Support',
+    sections: [
+      {
+        heading: '📈 Target Stat Stages',
+        items: [
+          'The "Additional Modifiers" section in each target panel now includes Atk, Def, SpD, and Spe stat stage steppers (−6 to +6).',
+          'Def and SpD stages are applied directly to damage calculations — a target at +2 Def effectively takes less physical damage, and so on.',
+          'Atk stage feeds into Foul Play, which uses the target\'s Attack stat.',
+          'Spe stage is factored into all outspeed comparisons, the speed chip, and speed tooltips — so you can model a Choice Scarf or a Speed drop accurately.',
+        ],
+      },
+      {
+        heading: '⚔ Attacker Stat Stages',
+        items: [
+          'A new "Stat Changes" dropdown in the results panel adds Atk, Def, SpA, and Spe stage steppers for the attacker.',
+          'Atk stage scales Physical move damage; SpA stage scales Special move damage.',
+          'A separate Def stage is provided for Body Press, which deals damage based on the attacker\'s Defense stat rather than Attack.',
+          'Spe stage adjusts the attacker\'s effective speed for outspeed comparisons and the speed chip on each result card.',
+        ],
+      },
+      {
+        heading: '🥊 Body Press, Psyshock & Variants',
+        items: [
+          'Body Press is now correctly calculated using the attacker\'s Defense stat (not Attack). A "⬡ Uses Def" chip appears on Body Press rows as a reminder.',
+          'Psyshock, Psystrike, and Secret Sword are now correctly calculated against the target\'s Defense stat (not Sp. Def), despite being Special moves. A "⬡ Hits Def" chip appears on these rows.',
+          'Light Screen still applies to all three variants — they are Special moves and the screen check follows move category, not the defensive stat used.',
+        ],
+      },
+      {
+        heading: '📊 Stat Chip Improvements',
+        items: [
+          'The Atk and SpA chips on each result card now have the same tooltip treatment as the speed chip: hover to see the base stat, uninvested L50 value, and effective value after any attacker stage modifier.',
+          'The speed chip tooltip now includes a stage breakdown line when an attacker Spe stage is active, showing the uninvested L50 speed, the stage multiplier, and the final effective speed.',
+          'When a stage is active, the chip also shows the effective value in grey next to the base stat.',
+        ],
+      },
+      {
+        heading: '🔄 Reset Additional Modifiers',
+        items: [
+          'A "✕ Reset" button now appears in the "Additional Modifiers" header whenever any modifier is active on a target.',
+          'Clicking it clears the held item, screens, Tailwind, Friend Guard, and all stat stages for that target in one go — no need to undo each setting individually.',
+          'The button uses stopPropagation so clicking it doesn\'t accidentally toggle the section open or closed.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.7.3',
     date: 'May 2026',
     title: 'EV Input Improvements',

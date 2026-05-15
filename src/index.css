@@ -13,3 +13,59 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/*
+  Scroll-shadow trick (pure CSS, no JS):
+  - "local" backgrounds scroll with the content → they cover the shadow when at the edge
+  - "scroll" backgrounds stay fixed → they are the actual shadows
+  Result: shadow appears only when there is overflow content in that direction.
+*/
+.ohko-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background:
+    /* right-edge cover — hides the right shadow when fully scrolled right */
+    linear-gradient(to left,  #fff 40%, transparent) right  / 28px 100% no-repeat,
+    /* left-edge cover  — hides the left shadow when fully scrolled left */
+    linear-gradient(to right, #fff 40%, transparent) left   / 28px 100% no-repeat,
+    /* right shadow */
+    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,0.22), transparent) right  / 20px 100% no-repeat,
+    /* left shadow */
+    radial-gradient(farthest-side at   0% 50%, rgba(0,0,0,0.22), transparent) left   / 20px 100% no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* Per-target column inside the expanded result card */
+.ohko-target-col {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .ohko-target-col {
+    flex-basis: 420px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .ohko-target-col {
+    flex-basis: 560px;
+  }
+}
+
+/* Move table: wider on larger viewports before horizontal scroll kicks in */
+.ohko-move-table {
+  min-width: 580px;
+}
+
+@media (min-width: 768px) {
+  .ohko-move-table {
+    min-width: 720px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .ohko-move-table {
+    min-width: 900px;
+  }
+}

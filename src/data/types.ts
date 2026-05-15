@@ -36,6 +36,7 @@ export interface Move {
   description: string;
   priority: number;       // 0 = normal, +1/+2 = fast priority, negative = slow
   flags: MoveFlag[];
+  effectId: number;             // PokeAPI effect_id — used to identify self-debuff effects
   effectChance: number | null; // chance of secondary effect (> 0 = Sheer Force applicable)
   isSpread: boolean;     // hits multiple targets (×0.75 in doubles): target_id 9 or 11
 }

@@ -7,9 +7,39 @@ import type { GameData, Move, Pokemon } from '../data/types';
 const GRAVITY_UNUSABLE_MOVE_IDS = new Set([19, 26, 136, 340, 507]);
 
 /**
+ * Sheer Force moves whose secondary effect is always guaranteed (100%), so PokeAPI
+ * stores no `effect_chance` value — they must be explicitly included.
+ * Spirit Shackle (662), Anchor Shot (677), Genesis Supernova (703).
+ */
+const SHEER_FORCE_ALWAYS_MOVE_IDS = new Set([662, 677, 703]);
+
+/**
+ * PokeAPI effect IDs whose `effect_chance` represents a self-debuff (user stat drop)
+ * rather than a beneficial secondary effect. Sheer Force must NOT boost these moves
+ * even though they have effect_chance > 0.
+ *
+ *  183 — lowers user's Atk and Def (Superpower)
+ *  205 — lowers user's Sp. Atk by 2 (Overheat, Draco Meteor, Leaf Storm, Fleur Cannon, Psycho Boost)
+ *  219 — lowers user's Speed (Hammer Arm, Ice Hammer)
+ *  230 — lowers user's Def and Sp. Def (Close Combat, Dragon Ascent)
+ */
+const SHEER_FORCE_EXCLUDED_EFFECT_IDS = new Set([183, 205, 219, 230]);
+
+/**
  * Foul Play uses the *target's* Attack stat instead of the attacker's.
  */
 export const FOUL_PLAY_MOVE_ID = 492;
+
+/**
+ * Body Press deals damage using the attacker's Defense stat instead of Attack.
+ */
+export const BODY_PRESS_MOVE_ID = 776;
+
+/**
+ * Psyshock, Psystrike, and Secret Sword are Special moves that deal damage
+ * using the *target's* Defense stat instead of its Sp. Defense.
+ */
+export const PSYSHOCK_MOVE_IDS = new Set([473, 540, 548]);
 
 export interface EVSpread {
   hp: number;
@@ -31,6 +61,12 @@ export interface TargetConfig {
   speNature?: number;
   /** Partner Pokémon has Friend Guard — reduces all incoming damage by ×0.75 (doubles only). */
   friendGuard?: boolean;
+  /** Active Attack stat stage for this target (−6 to +6) — used by Foul Play. */
+  atkStage?: number;
+  /** Active Defense stat stage for this target (−6 to +6). */
+  defStage?: number;
+  /** Active Sp. Defense stat stage for this target (−6 to +6). */
+  spdStage?: number;
 }
 
 export interface TargetHeldItem {
@@ -164,7 +200,9 @@ function getAbilityMod(
     case 'tough-claws':  return move.flags.includes('contact') ? mod(1.3) : null;
     case 'punk-rock':    return move.flags.includes('sound')   ? mod(1.3) : null;
     case 'sheer-force':
-      return (move.effectChance !== null && move.effectChance > 0) ? mod(1.3) : null;
+      if (SHEER_FORCE_EXCLUDED_EFFECT_IDS.has(move.effectId)) return null;
+      return (move.effectChance !== null && move.effectChance > 0) || SHEER_FORCE_ALWAYS_MOVE_IDS.has(move.id)
+        ? mod(1.3) : null;
 
     // ── Type-based power boosts ────────────────────────────────────────────
     case 'steelworker':  return move.typeId === 9  ? mod(1.5) : null; // Steel
@@ -252,6 +290,16 @@ export function calcStat(base: number, ev = 0, iv = 31, level = 50, nature = 1.0
   return Math.floor((Math.floor((2 * base + iv + Math.floor(ev / 4)) * level / 100) + 5) * nature);
 }
 
+/**
+ * Converts a stat stage (−6 to +6) to its in-battle multiplier.
+ * Positive: (2 + stage) / 2   →  +1 = ×1.5,  +2 = ×2.0,  +6 = ×4.0
+ * Negative:  2 / (2 − stage)  →  −1 = ×0.667, −2 = ×0.5, −6 = ×0.25
+ */
+export function stageMult(stage: number): number {
+  const s = Math.max(-6, Math.min(6, stage));
+  return s >= 0 ? (2 + s) / 2 : 2 / (2 - s);
+}
+
 function damageSingle(
   power: number,
   atk: number,
@@ -290,9 +338,10 @@ function minEVsToOHKO(
   effFactor: number,
   guaranteed: boolean,
   itemMult = 1.0,
+  atkStageMult = 1.0,
 ): number | null {
   for (let ev = 0; ev <= 252; ev += 4) {
-    const atk = calcStat(atkBase, ev, 31, 50, 1.0);
+    const atk = Math.floor(calcStat(atkBase, ev, 31, 50, 1.0) * atkStageMult);
     const { min, max } = damageSingle(power, atk, def, stabFactor, effFactor, itemMult);
     if (guaranteed ? min >= targetHP : max >= targetHP) return ev;
   }
@@ -312,6 +361,9 @@ interface TargetStats {
   reflect: boolean;
   lightScreen: boolean;
   friendGuard: boolean;
+  atkStage: number;
+  defStage: number;
+  spdStage: number;
 }
 
 interface OHKOAttempt {
@@ -338,6 +390,9 @@ function tryOHKO(
   gravity: boolean,
   terrain: Terrain,
   fairyAura: boolean,
+  atkStage: number,
+  spaStage: number,
+  atkDefStage: number,
 ): OHKOAttempt | null {
   const effectiveTypeId = abilityMod?.typeOverride ?? move.typeId;
 
@@ -357,12 +412,23 @@ function tryOHKO(
   if (berry) effFactor = Math.floor(effFactor * berry.mult);
 
   const isPhysical = move.damageClassId === 2;
-  const rawDef = isPhysical ? ts.def : ts.spd;
-  const statMult = isPhysical ? ts.defMult : ts.spdMult;
+  // Psyshock/Psystrike/Secret Sword: Special moves that hit the target's Defense, not Sp. Def
+  const isPsyshock = PSYSHOCK_MOVE_IDS.has(move.id);
+  const rawDef = (isPhysical || isPsyshock) ? ts.def : ts.spd;
+  const targetStageMult = (isPhysical || isPsyshock) ? stageMult(ts.defStage) : stageMult(ts.spdStage);
+  const statMult = (isPhysical || isPsyshock) ? ts.defMult : ts.spdMult;
   // Screens: singles = ×0.5 damage (×2.0 defense), doubles = ×2/3 damage (×1.5 defense)
+  // Screen type is based on move category (Psyshock is special → Light Screen applies)
   const screenDefMult = isDoubles ? 1.5 : 2.0;
   const screenMult = isPhysical ? (ts.reflect ? screenDefMult : 1.0) : (ts.lightScreen ? screenDefMult : 1.0);
-  const defStat = Math.floor(rawDef * statMult * screenMult);
+  const defStat = Math.floor(rawDef * targetStageMult * statMult * screenMult);
+
+  // Attacker stat stage — physical uses atkStage, special uses spaStage.
+  // Foul Play uses the target's Attack, so attacker stages don't apply.
+  // Body Press uses the attacker's Defense, so it uses atkDefStage instead.
+  const atkStageMult = move.id === FOUL_PLAY_MOVE_ID ? 1.0
+    : move.id === BODY_PRESS_MOVE_ID ? stageMult(atkDefStage)
+    : stageMult(isPhysical ? atkStage : spaStage);
 
   const stab = attackerTypeIds.includes(effectiveTypeId);
   const stabFactor = stab ? (abilityMod?.stabMult ?? 1.5) : 1.0;
@@ -386,18 +452,19 @@ function tryOHKO(
   let item: HeldItem | undefined;
 
   if (isFoulPlay) {
-    // Attack stat is fixed to the target's; just check if the damage lands
-    const { min, max } = damageSingle(effectivePower, ts.atk, defStat, stabFactor, effFactor, 1.0);
+    // Foul Play uses the target's Attack including their active Attack stage
+    const foulPlayAtk = Math.floor(ts.atk * stageMult(ts.atkStage));
+    const { min, max } = damageSingle(effectivePower, foulPlayAtk, defStat, stabFactor, effFactor, 1.0);
     const lands = !showPossible ? min >= ts.hp : max >= ts.hp;
     if (!lands) return null;
     evNeeded = 0;
   } else {
-    evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible);
+    evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, 1.0, atkStageMult);
 
     if (evNeeded === null) {
       const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
       if (typeItem) {
-        evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost);
+        evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost, atkStageMult);
         if (evNeeded !== null) item = typeItem;
       }
     }
@@ -405,7 +472,7 @@ function tryOHKO(
     if (evNeeded === null) return null;
   }
 
-  const atkStat = isFoulPlay ? ts.atk : calcStat(atkBase, evNeeded, 31, 50, 1.0);
+  const atkStat = isFoulPlay ? ts.atk : Math.floor(calcStat(atkBase, evNeeded, 31, 50, 1.0) * atkStageMult);
   const { min, max } = damageSingle(effectivePower, atkStat, defStat, stabFactor, effFactor, item?.boost ?? 1.0);
 
   return { evNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy };
@@ -421,6 +488,9 @@ export function findPokemonOHKOs(
   gravity = false,
   terrain: Terrain = 'none',
   fairyAura = false,
+  atkStage = 0,
+  spaStage = 0,
+  atkDefStage = 0,
 ): PokemonOHKOResult[] {
   if (targets.length === 0) return [];
 
@@ -437,6 +507,9 @@ export function findPokemonOHKOs(
     reflect: t.reflect ?? false,
     lightScreen: t.lightScreen ?? false,
     friendGuard: t.friendGuard ?? false,
+    atkStage: t.atkStage ?? 0,
+    defStage: t.defStage ?? 0,
+    spdStage: t.spdStage ?? 0,
   }));
 
   const results: PokemonOHKOResult[] = [];
@@ -454,7 +527,10 @@ export function findPokemonOHKOs(
       if (gravity && GRAVITY_UNUSABLE_MOVE_IDS.has(move.id)) continue;
 
       const isPhysical = move.damageClassId === 2;
-      const atkBase = isPhysical ? attacker.stats.atk : attacker.stats.spa;
+      // Body Press deals damage using the attacker's Defense instead of Attack
+      const atkBase = move.id === BODY_PRESS_MOVE_ID
+        ? attacker.stats.def
+        : (isPhysical ? attacker.stats.atk : attacker.stats.spa);
 
       type AbilityConfig = { mod: AbilityMod | null; ability: typeof attacker.abilities[0] | null };
 
@@ -472,7 +548,7 @@ export function findPokemonOHKOs(
       const findBest = (configs: AbilityConfig[], w: Weather, ts: TargetStats) => {
         let best: { attempt: OHKOAttempt; ability: typeof attacker.abilities[0] | null } | null = null;
         for (const { mod, ability } of configs) {
-          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura);
+          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage);
           if (attempt && (!best || attempt.evNeeded < best.attempt.evNeeded)) {
             best = { attempt, ability };
           }
@@ -533,7 +609,7 @@ export function findPokemonOHKOs(
           item: chosen.item,
           abilityMod: abilityRequired,
           weatherRequired,
-          foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? ts.atk : undefined,
+          foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
           coveredTargetIndices: [],
         });
       }

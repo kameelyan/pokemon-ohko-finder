@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { loadGameData } from './data/loader';
 import type { GameData, Pokemon } from './data/types';
-import { findPokemonOHKOs, calcHP, calcStat, TARGET_HELD_ITEMS } from './calc/damage';
+import { findPokemonOHKOs, calcHP, calcStat, stageMult, TARGET_HELD_ITEMS } from './calc/damage';
 import type { PokemonOHKOResult, EVSpread, TargetConfig, TargetHeldItem, Weather, Terrain } from './calc/damage';
 import PokemonSearch from './components/PokemonSearch';
 import PokemonResultsView from './components/PokemonResultsView';
@@ -103,6 +103,10 @@ interface TargetSlot {
   nature: string; // nature name, or 'Neutral'
   tailwind: boolean;
   friendGuard: boolean;
+  atkStage: number;     // −6 to +6 (used by Foul Play)
+  defStage: number;     // −6 to +6
+  spdStage: number;     // −6 to +6
+  speStage: number;     // −6 to +6 (affects outspeed comparisons)
 }
 
 /** Shape written to / read from localStorage (no full Pokemon object). */
@@ -116,11 +120,15 @@ interface SavedSlot {
   nature?: string;
   tailwind?: boolean;
   friendGuard?: boolean;
+  atkStage?: number;
+  defStage?: number;
+  spdStage?: number;
+  speStage?: number;
 }
 
 let nextId = 1;
 function makeSlot(): TargetSlot {
-  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false, heldItem: null, reflect: false, lightScreen: false, nature: 'Neutral', tailwind: false, friendGuard: false };
+  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false, heldItem: null, reflect: false, lightScreen: false, nature: 'Neutral', tailwind: false, friendGuard: false, atkStage: 0, defStage: 0, spdStage: 0, speStage: 0 };
 }
 
 export default function App() {
@@ -143,6 +151,10 @@ export default function App() {
   const [showPossible, setShowPossible] = useState(false);
   const [minAccuracy, setMinAccuracy] = useState(0);
   const [weather, setWeather] = useState<Weather>('none');
+  const [atkStage, setAtkStage] = useState(0);
+  const [spaStage, setSpaStage] = useState(0);
+  const [atkDefStage, setAtkDefStage] = useState(0);
+  const [atkSpeStage, setAtkSpeStage] = useState(0);
 
   useEffect(() => {
     loadGameData()
@@ -169,6 +181,10 @@ export default function App() {
             nature: s.nature ?? 'Neutral',
             tailwind: s.tailwind ?? false,
             friendGuard: s.friendGuard ?? false,
+            atkStage: s.atkStage ?? 0,
+            defStage: s.defStage ?? 0,
+            spdStage: s.spdStage ?? 0,
+            speStage: s.speStage ?? 0,
           }));
           restoredRef.current = true; // open gate before setSlots so the next save is correct
           setSlots(restored);
@@ -192,6 +208,10 @@ export default function App() {
       nature: s.nature,
       tailwind: s.tailwind,
       friendGuard: s.friendGuard,
+      atkStage: s.atkStage,
+      defStage: s.defStage,
+      spdStage: s.spdStage,
+      speStage: s.speStage,
     }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   }, [slots]);
@@ -226,33 +246,38 @@ export default function App() {
       spdNature: getNatureMult(s.nature, 'spd'),
       speNature: getNatureMult(s.nature, 'spe'),
       friendGuard: isDoubles ? s.friendGuard : false,
+      atkStage: s.atkStage,
+      defStage: s.defStage,
+      spdStage: s.spdStage,
     }));
 
-  // EV-invested, nature-adjusted L50 speed for each active target (×2 under Tailwind)
+  // EV-invested, nature-adjusted L50 speed for each active target (×stage ×2 under Tailwind)
   const targetSpeeds: number[] = slots
     .filter(s => s.pokemon !== null)
     .map(s => {
       const base = calcStat(s.pokemon!.stats.spe, s.evs.spe, 31, 50, getNatureMult(s.nature, 'spe'));
-      return s.tailwind ? base * 2 : base;
+      const afterStage = Math.floor(base * stageMult(s.speStage));
+      return s.tailwind ? afterStage * 2 : afterStage;
     });
 
-  // Speeds of targets with mustOutspeed checked (also Tailwind-aware)
+  // Speeds of targets with mustOutspeed checked (also stage- and Tailwind-aware)
   const mustOutspeedSpeeds: number[] = slots
     .filter(s => s.pokemon !== null && s.mustOutspeed)
     .map(s => {
       const base = calcStat(s.pokemon!.stats.spe, s.evs.spe, 31, 50, getNatureMult(s.nature, 'spe'));
-      return s.tailwind ? base * 2 : base;
+      const afterStage = Math.floor(base * stageMult(s.speStage));
+      return s.tailwind ? afterStage * 2 : afterStage;
     });
 
   useEffect(() => {
     if (!data || activeTargets.length === 0) { setResults([]); return; }
     setComputing(true);
     setTimeout(() => {
-      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura));
+      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage));
       setComputing(false);
     }, 10);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, slots, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura]);
+  }, [data, slots, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage]);
 
   /* ── slot helpers ── */
   const updateSlot = (id: number, patch: Partial<TargetSlot>) =>
@@ -544,6 +569,14 @@ export default function App() {
                     onTailwindChange={v => updateSlot(slot.id, { tailwind: v })}
                     friendGuard={slot.friendGuard}
                     onFriendGuardChange={v => updateSlot(slot.id, { friendGuard: v })}
+                    atkStage={slot.atkStage}
+                    onAtkStageChange={v => updateSlot(slot.id, { atkStage: v })}
+                    defStage={slot.defStage}
+                    onDefStageChange={v => updateSlot(slot.id, { defStage: v })}
+                    spdStage={slot.spdStage}
+                    onSpdStageChange={v => updateSlot(slot.id, { spdStage: v })}
+                    speStage={slot.speStage}
+                    onSpeStageChange={v => updateSlot(slot.id, { speStage: v })}
                     isDoubles={isDoubles}
                     data={data!}
                   />
@@ -598,6 +631,7 @@ export default function App() {
                   targetNames={filledNames}
                   targetSpeeds={targetSpeeds}
                   mustOutspeedSpeeds={mustOutspeedSpeeds}
+                  targetsMustOutspeed={slots.filter(s => s.pokemon !== null).map(s => s.mustOutspeed)}
                   championsOnly={championsOnly}
                   data={data!}
                   showPossible={showPossible}
@@ -612,6 +646,14 @@ export default function App() {
                   onTerrainChange={setTerrain}
                   fairyAura={fairyAura}
                   onFairyAuraChange={setFairyAura}
+                  atkStage={atkStage}
+                  onAtkStageChange={setAtkStage}
+                  spaStage={spaStage}
+                  onSpaStageChange={setSpaStage}
+                  atkDefStage={atkDefStage}
+                  onAtkDefStageChange={setAtkDefStage}
+                  atkSpeStage={atkSpeStage}
+                  onAtkSpeStageChange={setAtkSpeStage}
                   isDoubles={isDoubles}
                 />
               </div>
@@ -665,7 +707,7 @@ const HELD_ITEM_GROUPS: { label: string; items: typeof TARGET_HELD_ITEMS }[] = [
   },
 ];
 
-function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, reflect, lightScreen, nature, tailwind, onTailwindChange, friendGuard, onFriendGuardChange, isDoubles, onSelect, onRemove, onEvsChange, onMustOutspeedChange, onHeldItemChange, onReflectChange, onLightScreenChange, onNatureChange, data }: {
+function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, reflect, lightScreen, nature, tailwind, onTailwindChange, friendGuard, onFriendGuardChange, atkStage, onAtkStageChange, defStage, onDefStageChange, spdStage, onSpdStageChange, speStage, onSpeStageChange, isDoubles, onSelect, onRemove, onEvsChange, onMustOutspeedChange, onHeldItemChange, onReflectChange, onLightScreenChange, onNatureChange, data }: {
   label: string;
   pokemon: Pokemon[];
   selected: Pokemon | null;
@@ -679,6 +721,14 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
   onTailwindChange: (v: boolean) => void;
   friendGuard: boolean;
   onFriendGuardChange: (v: boolean) => void;
+  atkStage: number;
+  onAtkStageChange: (v: number) => void;
+  defStage: number;
+  onDefStageChange: (v: number) => void;
+  spdStage: number;
+  onSpdStageChange: (v: number) => void;
+  speStage: number;
+  onSpeStageChange: (v: number) => void;
   isDoubles: boolean;
   onSelect: (p: Pokemon) => void;
   onRemove?: () => void;
@@ -690,12 +740,16 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
   onNatureChange: (n: string) => void;
   data: GameData;
 }) {
-  const hp  = selected ? calcHP(selected.stats.hp, evs.hp) : 0;
-  const atk = selected ? calcStat(selected.stats.atk, evs.atk, 31, 50, getNatureMult(nature, 'atk')) : 0;
-  const def = selected ? calcStat(selected.stats.def, evs.def, 31, 50, getNatureMult(nature, 'def')) : 0;
-  const spd = selected ? calcStat(selected.stats.spd, evs.spd, 31, 50, getNatureMult(nature, 'spd')) : 0;
+  const hp     = selected ? calcHP(selected.stats.hp, evs.hp) : 0;
+  const atk    = selected ? calcStat(selected.stats.atk, evs.atk, 31, 50, getNatureMult(nature, 'atk')) : 0;
+  const def    = selected ? calcStat(selected.stats.def, evs.def, 31, 50, getNatureMult(nature, 'def')) : 0;
+  const spd    = selected ? calcStat(selected.stats.spd, evs.spd, 31, 50, getNatureMult(nature, 'spd')) : 0;
   const baseSpe = selected ? calcStat(selected.stats.spe, evs.spe, 31, 50, getNatureMult(nature, 'spe')) : 0;
-  const spe = tailwind ? baseSpe * 2 : baseSpe;
+  const speAfterStage = selected ? Math.floor(baseSpe * stageMult(speStage)) : 0;
+  const spe    = tailwind ? speAfterStage * 2 : speAfterStage;
+  const atkEff = selected ? Math.floor(atk * stageMult(atkStage)) : 0;
+  const defEff = selected ? Math.floor(def * stageMult(defStage)) : 0;
+  const spdEff = selected ? Math.floor(spd * stageMult(spdStage)) : 0;
 
   return (
     <div style={{
@@ -757,64 +811,90 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
               const atkNatMult = getNatureMult(nature, 'atk');
               const atkNatLabel = atkNatMult === 1.1 ? '+10% (boosted)' : atkNatMult === 0.9 ? '−10% (reduced)' : 'neutral';
               return (
-                <StatPill label="Atk" base={selected.stats.atk} computed={atk} tooltip={
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: '5px' }}>Attack Stat at Lv. 50</div>
-                    <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.atk} · EVs: {evs.atk} · IVs: 31</div>
-                    <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {atkNatLabel}</div>
-                    <div style={{ color: '#68d391', fontWeight: 700 }}>→ {atk} Attack</div>
-                    <div style={{ color: '#aaa', marginTop: '4px', fontSize: '11px' }}>Used by Foul Play when this Pokémon is the target.</div>
-                  </div>
-                } />
+                <StatPill
+                  label="Atk"
+                  base={selected.stats.atk}
+                  computed={atk}
+                  effective={atkStage !== 0 ? atkEff : undefined}
+                  stage={atkStage !== 0 ? atkStage : undefined}
+                  tooltip={
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: '5px' }}>Attack Stat at Lv. 50</div>
+                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.atk} · EVs: {evs.atk} · IVs: 31</div>
+                      <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {atkNatLabel}</div>
+                      <div style={{ color: '#68d391', fontWeight: 700 }}>→ {atk} Attack</div>
+                      {atkStage !== 0 && <div style={{ color: atkStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginTop: '2px' }}>Stage {atkStage > 0 ? `+${atkStage}` : atkStage}: → {atkEff} effective</div>}
+                      <div style={{ color: '#aaa', marginTop: '4px', fontSize: '11px' }}>Used by Foul Play when this Pokémon is the target.</div>
+                    </div>
+                  }
+                />
               );
             })()}
             {(() => {
               const defNatMult = getNatureMult(nature, 'def');
               const defNatLabel = defNatMult === 1.1 ? '+10% (boosted)' : defNatMult === 0.9 ? '−10% (reduced)' : 'neutral';
               return (
-                <StatPill label="Def" base={selected.stats.def} computed={def} tooltip={
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: '5px' }}>Defense Stat at Lv. 50</div>
-                    <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.def} · EVs: {evs.def} · IVs: 31</div>
-                    <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {defNatLabel}</div>
-                    <div style={{ color: '#68d391', fontWeight: 700 }}>→ {def} Defense</div>
-                  </div>
-                } />
+                <StatPill
+                  label="Def"
+                  base={selected.stats.def}
+                  computed={def}
+                  effective={defStage !== 0 ? defEff : undefined}
+                  stage={defStage !== 0 ? defStage : undefined}
+                  tooltip={
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: '5px' }}>Defense Stat at Lv. 50</div>
+                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.def} · EVs: {evs.def} · IVs: 31</div>
+                      <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {defNatLabel}</div>
+                      <div style={{ color: '#68d391', fontWeight: 700 }}>→ {def} Defense</div>
+                      {defStage !== 0 && <div style={{ color: defStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginTop: '2px' }}>Stage {defStage > 0 ? `+${defStage}` : defStage}: → {defEff} effective</div>}
+                    </div>
+                  }
+                />
               );
             })()}
             {(() => {
               const spdNatMult = getNatureMult(nature, 'spd');
               const spdNatLabel = spdNatMult === 1.1 ? '+10% (boosted)' : spdNatMult === 0.9 ? '−10% (reduced)' : 'neutral';
               return (
-                <StatPill label="SpD" base={selected.stats.spd} computed={spd} tooltip={
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: '5px' }}>Sp. Defense Stat at Lv. 50</div>
-                    <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.spd} · EVs: {evs.spd} · IVs: 31</div>
-                    <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {spdNatLabel}</div>
-                    <div style={{ color: '#68d391', fontWeight: 700 }}>→ {spd} Sp. Defense</div>
-                  </div>
-                } />
+                <StatPill
+                  label="SpD"
+                  base={selected.stats.spd}
+                  computed={spd}
+                  effective={spdStage !== 0 ? spdEff : undefined}
+                  stage={spdStage !== 0 ? spdStage : undefined}
+                  tooltip={
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: '5px' }}>Sp. Defense Stat at Lv. 50</div>
+                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.spd} · EVs: {evs.spd} · IVs: 31</div>
+                      <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {spdNatLabel}</div>
+                      <div style={{ color: '#68d391', fontWeight: 700 }}>→ {spd} Sp. Defense</div>
+                      {spdStage !== 0 && <div style={{ color: spdStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginTop: '2px' }}>Stage {spdStage > 0 ? `+${spdStage}` : spdStage}: → {spdEff} effective</div>}
+                    </div>
+                  }
+                />
               );
             })()}
             {(() => {
               const speNatMult = getNatureMult(nature, 'spe');
               const speNatLabel = speNatMult === 1.1 ? '+10% (boosted)' : speNatMult === 0.9 ? '−10% (reduced)' : 'neutral';
               return (
-                <StatPill label="Spe" base={selected.stats.spe} computed={spe} tooltip={
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: '5px' }}>Speed Stat at Lv. 50</div>
-                    <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.spe} · EVs: {evs.spe} · IVs: 31</div>
-                    <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Nature: {speNatLabel}</div>
-                    {tailwind ? (
-                      <>
-                        <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Tailwind: ×2</div>
-                        <div style={{ color: '#68d391', fontWeight: 700 }}>→ {baseSpe} Speed · ×2 = {spe} effective</div>
-                      </>
-                    ) : (
-                      <div style={{ color: '#68d391', fontWeight: 700 }}>→ {spe} Speed</div>
-                    )}
-                  </div>
-                } />
+                <StatPill
+                  label="Spe"
+                  base={selected.stats.spe}
+                  computed={baseSpe}
+                  effective={speStage !== 0 || tailwind ? spe : undefined}
+                  stage={speStage !== 0 ? speStage : undefined}
+                  tooltip={
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: '5px' }}>Speed Stat at Lv. 50</div>
+                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.spe} · EVs: {evs.spe} · IVs: 31</div>
+                      <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {speNatLabel}</div>
+                      <div style={{ color: '#68d391', fontWeight: 700 }}>→ {baseSpe} Speed</div>
+                      {speStage !== 0 && <div style={{ color: speStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginTop: '2px' }}>Stage {speStage > 0 ? `+${speStage}` : speStage}: → {speAfterStage} effective</div>}
+                      {tailwind && <div style={{ color: '#90cdf4', fontWeight: 700, marginTop: '2px' }}>Tailwind ×2: → {spe} effective</div>}
+                    </div>
+                  }
+                />
               );
             })()}
           </div>
@@ -893,9 +973,28 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
             onTailwindChange={onTailwindChange}
             friendGuard={friendGuard}
             onFriendGuardChange={onFriendGuardChange}
+            atkStage={atkStage}
+            onAtkStageChange={onAtkStageChange}
+            defStage={defStage}
+            onDefStageChange={onDefStageChange}
+            spdStage={spdStage}
+            onSpdStageChange={onSpdStageChange}
+            speStage={speStage}
+            onSpeStageChange={onSpeStageChange}
             isDoubles={isDoubles}
             data={data}
             selected={selected}
+            onReset={() => {
+              onHeldItemChange(null);
+              onReflectChange(false);
+              onLightScreenChange(false);
+              onTailwindChange(false);
+              onFriendGuardChange(false);
+              onAtkStageChange(0);
+              onDefStageChange(0);
+              onSpdStageChange(0);
+              onSpeStageChange(0);
+            }}
           />
         </div>
       )}
@@ -909,7 +1008,11 @@ function AdditionalSettings({
   lightScreen, onLightScreenChange,
   tailwind, onTailwindChange,
   friendGuard, onFriendGuardChange,
-  isDoubles, data, selected,
+  atkStage, onAtkStageChange,
+  defStage, onDefStageChange,
+  spdStage, onSpdStageChange,
+  speStage, onSpeStageChange,
+  isDoubles, data, selected, onReset,
 }: {
   heldItem: TargetHeldItem | null;
   onHeldItemChange: (item: TargetHeldItem | null) => void;
@@ -921,9 +1024,18 @@ function AdditionalSettings({
   onTailwindChange: (v: boolean) => void;
   friendGuard: boolean;
   onFriendGuardChange: (v: boolean) => void;
+  atkStage: number;
+  onAtkStageChange: (v: number) => void;
+  defStage: number;
+  onDefStageChange: (v: number) => void;
+  spdStage: number;
+  onSpdStageChange: (v: number) => void;
+  speStage: number;
+  onSpeStageChange: (v: number) => void;
   isDoubles: boolean;
   data: GameData;
   selected: Pokemon;
+  onReset: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -932,7 +1044,11 @@ function AdditionalSettings({
     (reflect ? 1 : 0) +
     (lightScreen ? 1 : 0) +
     (tailwind ? 1 : 0) +
-    (friendGuard && isDoubles ? 1 : 0);
+    (friendGuard && isDoubles ? 1 : 0) +
+    (atkStage !== 0 ? 1 : 0) +
+    (defStage !== 0 ? 1 : 0) +
+    (spdStage !== 0 ? 1 : 0) +
+    (speStage !== 0 ? 1 : 0);
 
   return (
     <div style={{ marginTop: '10px' }}>
@@ -958,6 +1074,17 @@ function AdditionalSettings({
               borderRadius: '999px', fontSize: '10px', fontWeight: 700,
               padding: '1px 6px', lineHeight: 1.4,
             }}>{activeCount}</span>
+          )}
+          {activeCount > 0 && (
+            <button
+              onClick={e => { e.stopPropagation(); onReset(); }}
+              style={{
+                fontSize: '10px', padding: '1px 7px',
+                border: '1px solid #ddd', borderRadius: '4px',
+                background: '#fff', cursor: 'pointer', color: '#999',
+                fontWeight: 600, lineHeight: 1.5,
+              }}
+            >✕ Reset</button>
           )}
         </div>
         <span style={{ fontSize: '10px', color: '#aaa', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', display: 'inline-block' }}>▶</span>
@@ -1081,6 +1208,19 @@ function AdditionalSettings({
               </Tooltip>
             </div>
           </div>
+
+          {/* Target stat stages */}
+          <div>
+            <div style={{ fontSize: '10px', color: '#999', marginBottom: '6px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Stat Stages
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '32px 22px 36px 22px 16px', gap: '5px 6px', alignItems: 'center' }}>
+              <StatStageStepper label="Atk" value={atkStage} onChange={onAtkStageChange} labelTooltip="Used by Foul Play, which deals damage using this Pokémon's Attack stat." />
+              <StatStageStepper label="Def" value={defStage} onChange={onDefStageChange} />
+              <StatStageStepper label="SpD" value={spdStage} onChange={onSpdStageChange} />
+              <StatStageStepper label="Spe" value={speStage} onChange={onSpeStageChange} />
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1104,15 +1244,84 @@ function EVInput({ label, value, onChange, error }: { label: string; value: numb
   );
 }
 
-function StatPill({ label, base, computed, tooltip }: { label: string; base: number; computed?: number; tooltip?: React.ReactNode }) {
+function StatPill({ label, base, computed, effective, stage, tooltip }: {
+  label: string;
+  base: number;
+  computed?: number;
+  effective?: number;
+  stage?: number;
+  tooltip?: React.ReactNode;
+}) {
+  const displayed = (effective !== undefined && stage !== undefined && stage !== 0) ? effective : computed;
   const pill = (
-    <span style={{ background: '#efefef', borderRadius: '5px', padding: '2px 6px', fontWeight: 600, cursor: tooltip ? 'help' : 'default' }}>
+    <span style={{
+      background: '#efefef', borderRadius: '5px', padding: '2px 6px',
+      fontWeight: 600, cursor: tooltip ? 'help' : 'default',
+    }}>
       {label}: {base}
-      {computed !== undefined && <span style={{ color: '#999' }}> ({computed})</span>}
+      {displayed !== undefined && <span style={{ color: '#999' }}> ({displayed})</span>}
     </span>
   );
   return tooltip ? <Tooltip content={tooltip} side="bottom" maxWidth={220}>{pill}</Tooltip> : pill;
 }
+
+function StatStageStepper({ label, value, onChange, labelTooltip }: { label: string; value: number; onChange: (v: number) => void; labelTooltip?: React.ReactNode }) {
+  const color = value > 0 ? '#276749' : value < 0 ? '#9b2c2c' : '#aaa';
+  const bg    = value > 0 ? '#f0fff4' : value < 0 ? '#fff5f5' : '#f7f7f7';
+  const labelEl = (
+    <span style={{
+      fontSize: '11px', color: '#888', fontWeight: 700,
+      cursor: labelTooltip ? 'help' : 'default',
+      borderBottom: labelTooltip ? '1px dashed #ccc' : 'none',
+    }}>
+      {label}
+    </span>
+  );
+  // Returns a fragment — parent must be a CSS grid with 5 columns
+  return (
+    <>
+      {labelTooltip
+        ? <Tooltip content={labelTooltip} side="right" maxWidth={200}>{labelEl}</Tooltip>
+        : labelEl}
+      <button
+        onClick={() => onChange(Math.max(-6, value - 1))}
+        disabled={value <= -6}
+        style={{ ...stageStepBtn, opacity: value <= -6 ? 0.3 : 1 }}
+      >−</button>
+      <span style={{
+        fontSize: '12px', fontWeight: 700, color,
+        background: bg, borderRadius: '4px',
+        padding: '1px 0', textAlign: 'center',
+        border: `1px solid ${value !== 0 ? color : '#ddd'}`,
+      }}>
+        {value > 0 ? `+${value}` : value}
+      </span>
+      <button
+        onClick={() => onChange(Math.min(6, value + 1))}
+        disabled={value >= 6}
+        style={{ ...stageStepBtn, opacity: value >= 6 ? 0.3 : 1 }}
+      >+</button>
+      {value !== 0 ? (
+        <Tooltip content="Reset to 0" side="top">
+          <button
+            onClick={() => onChange(0)}
+            style={{ fontSize: '10px', color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '0', lineHeight: 1, justifySelf: 'center' }}
+          >✕</button>
+        </Tooltip>
+      ) : (
+        <span style={{ justifySelf: 'center' }} />
+      )}
+    </>
+  );
+}
+
+const stageStepBtn: React.CSSProperties = {
+  width: '22px', height: '22px', fontSize: '14px', fontWeight: 700,
+  border: '1px solid #ddd', borderRadius: '4px',
+  background: '#fff', cursor: 'pointer', color: '#555',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  padding: 0, lineHeight: 1,
+};
 
 const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: '11px', fontWeight: 700,
