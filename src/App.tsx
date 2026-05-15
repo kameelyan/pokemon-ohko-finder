@@ -360,7 +360,7 @@ export default function App() {
         </div>
       </header>
 
-      <main style={{ maxWidth: '1300px', margin: '0 auto', padding: '32px 24px' }}>
+      <main style={{ maxWidth: '1300px', margin: '0 auto', padding: '24px max(12px, min(24px, 3vw))' }}>
         {activeTab === 'notes' ? (
           <ReleaseNotes />
         ) : loading ? (
@@ -515,9 +515,10 @@ export default function App() {
               {/* Target grid */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))',
                 gap: '20px',
                 marginBottom: '20px',
+                minWidth: 0,
               }}>
                 {slots.map((slot, idx) => (
                   <TargetPanel
@@ -703,6 +704,8 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
       padding: '14px',
       background: '#fafafa',
       position: 'relative',
+      minWidth: 0,
+      overflow: 'hidden',
     }}>
       {/* Remove slot button */}
       {onRemove && (
