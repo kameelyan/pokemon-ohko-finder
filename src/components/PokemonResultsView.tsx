@@ -102,6 +102,8 @@ interface Props {
   onAtkDefStageChange: (v: number) => void;
   atkSpeStage: number;
   onAtkSpeStageChange: (v: number) => void;
+  choiceItem: 'band' | 'scarf' | 'specs' | null;
+  onChoiceItemChange: (v: 'band' | 'scarf' | 'specs' | null) => void;
   isDoubles: boolean;
 }
 
@@ -240,7 +242,7 @@ function minSpeedEVs(baseSpe: number, targetSpeed: number, natureMult: number, a
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export default function PokemonResultsView({ title, results, targetNames, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, gravity, onGravityChange, terrain, onTerrainChange, fairyAura, onFairyAuraChange, atkStage, onAtkStageChange, spaStage, onSpaStageChange, atkDefStage, onAtkDefStageChange, atkSpeStage, onAtkSpeStageChange, isDoubles }: Props) {
+export default function PokemonResultsView({ title, results, targetNames, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, gravity, onGravityChange, terrain, onTerrainChange, fairyAura, onFairyAuraChange, atkStage, onAtkStageChange, spaStage, onSpaStageChange, atkDefStage, onAtkDefStageChange, atkSpeStage, onAtkSpeStageChange, choiceItem, onChoiceItemChange, isDoubles }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -265,9 +267,9 @@ export default function PokemonResultsView({ title, results, targetNames, target
   // Apply filters
   const filteredResults = useMemo(() => {
     return results.filter(r => {
-      const atkSpeMult = stageMult(atkSpeStage);
+      const atkSpeMult = stageMult(atkSpeStage) * (choiceItem === 'scarf' ? 1.5 : 1.0);
       const spe    = Math.floor(calcStat(r.pokemon.stats.spe, 0) * atkSpeMult);
-      // Max reachable speed: 252 EVs + ×1.1 (+Spe nature) at L50, with stage
+      // Max reachable speed: 252 EVs + ×1.1 (+Spe nature) at L50, with stage + scarf
       const maxSpe = Math.floor(calcStat(r.pokemon.stats.spe, 252, 31, 50, 1.1) * atkSpeMult);
 
       if (filters.types.size > 0 && !r.pokemon.typeIds.some(t => filters.types.has(t))) return false;
@@ -475,6 +477,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
             onAtkDefStageChange={onAtkDefStageChange}
             atkSpeStage={atkSpeStage}
             onAtkSpeStageChange={onAtkSpeStageChange}
+            choiceItem={choiceItem}
+            onChoiceItemChange={onChoiceItemChange}
           />
           <BattlegroundDropdown
             weather={weather}
@@ -755,7 +759,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
           const isMega = pokemon.identifier.includes('-mega');
           const isExpanded = expandedIds.has(pokemon.id);
           const typeNames = pokemon.typeIds.map(tid => data.typeNames.get(tid) ?? '?');
-          const attackerSpe = Math.floor(calcStat(pokemon.stats.spe, 0) * stageMult(atkSpeStage));
+          const scarfMult = choiceItem === 'scarf' ? 1.5 : 1.0;
+          const attackerSpe = Math.floor(calcStat(pokemon.stats.spe, 0) * stageMult(atkSpeStage) * scarfMult);
 
           const moveCounts = movesPerTarget.map(moves => ({
             guaranteed: moves.filter(m => m.isGuaranteed).length,
@@ -822,19 +827,27 @@ export default function PokemonResultsView({ title, results, targetNames, target
                   </div>
 
                   {/* Atk chip */}
+                  {/* Atk chip */}
                   {(() => {
                     const uninvestedAtk = calcStat(pokemon.stats.atk, 0);
-                    const effectiveAtk = Math.floor(uninvestedAtk * stageMult(atkStage));
+                    const hasBand = choiceItem === 'band';
+                    const effectiveAtk = Math.floor(uninvestedAtk * stageMult(atkStage) * (hasBand ? 1.5 : 1.0));
+                    const showEffective = atkStage !== 0 || hasBand;
                     return (
                       <Tooltip
                         content={
                           <div>
                             <div style={{ fontWeight: 700, marginBottom: '7px' }}>Attack (uninvested L50)</div>
                             <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.atk} · EVs: 0 · IVs: 31</div>
-                            <div style={{ color: '#68d391', fontWeight: 700, marginBottom: atkStage !== 0 ? '2px' : '0' }}>→ {uninvestedAtk} Atk</div>
+                            <div style={{ color: '#68d391', fontWeight: 700, marginBottom: showEffective ? '2px' : '0' }}>→ {uninvestedAtk} Atk</div>
                             {atkStage !== 0 && (
-                              <div style={{ color: atkStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700 }}>
-                                Stage {atkStage > 0 ? `+${atkStage}` : atkStage}: → {effectiveAtk} effective
+                              <div style={{ color: atkStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginBottom: hasBand ? '2px' : '0' }}>
+                                Stage {atkStage > 0 ? `+${atkStage}` : atkStage}: → {Math.floor(uninvestedAtk * stageMult(atkStage))} Atk
+                              </div>
+                            )}
+                            {hasBand && (
+                              <div style={{ color: '#f6ad55', fontWeight: 700 }}>
+                                Choice Band ×1.5: → {effectiveAtk} effective
                               </div>
                             )}
                           </div>
@@ -842,12 +855,14 @@ export default function PokemonResultsView({ title, results, targetNames, target
                         maxWidth={220}
                       >
                         <span style={{
-                          background: '#f0f0f0', borderRadius: '5px', padding: '2px 7px',
+                          background: hasBand ? '#fffaf0' : '#f0f0f0',
+                          border: hasBand ? '1px solid #f6ad55' : '1px solid transparent',
+                          borderRadius: '5px', padding: '2px 7px',
                           fontSize: '12px', fontWeight: 600, cursor: 'help',
                           display: 'inline-flex', alignItems: 'center', gap: '4px',
                         }}>
                           Atk <span style={{ color: '#333' }}>{pokemon.stats.atk}</span>
-                          {atkStage !== 0 && (
+                          {showEffective && (
                             <span style={{ color: '#999', fontWeight: 400 }}>({effectiveAtk})</span>
                           )}
                         </span>
@@ -858,17 +873,24 @@ export default function PokemonResultsView({ title, results, targetNames, target
                   {/* SpA chip */}
                   {(() => {
                     const uninvestedSpa = calcStat(pokemon.stats.spa, 0);
-                    const effectiveSpa = Math.floor(uninvestedSpa * stageMult(spaStage));
+                    const hasSpecs = choiceItem === 'specs';
+                    const effectiveSpa = Math.floor(uninvestedSpa * stageMult(spaStage) * (hasSpecs ? 1.5 : 1.0));
+                    const showEffective = spaStage !== 0 || hasSpecs;
                     return (
                       <Tooltip
                         content={
                           <div>
                             <div style={{ fontWeight: 700, marginBottom: '7px' }}>Sp. Atk (uninvested L50)</div>
                             <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.spa} · EVs: 0 · IVs: 31</div>
-                            <div style={{ color: '#68d391', fontWeight: 700, marginBottom: spaStage !== 0 ? '2px' : '0' }}>→ {uninvestedSpa} SpA</div>
+                            <div style={{ color: '#68d391', fontWeight: 700, marginBottom: showEffective ? '2px' : '0' }}>→ {uninvestedSpa} SpA</div>
                             {spaStage !== 0 && (
-                              <div style={{ color: spaStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700 }}>
-                                Stage {spaStage > 0 ? `+${spaStage}` : spaStage}: → {effectiveSpa} effective
+                              <div style={{ color: spaStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginBottom: hasSpecs ? '2px' : '0' }}>
+                                Stage {spaStage > 0 ? `+${spaStage}` : spaStage}: → {Math.floor(uninvestedSpa * stageMult(spaStage))} SpA
+                              </div>
+                            )}
+                            {hasSpecs && (
+                              <div style={{ color: '#90cdf4', fontWeight: 700 }}>
+                                Choice Specs ×1.5: → {effectiveSpa} effective
                               </div>
                             )}
                           </div>
@@ -876,12 +898,14 @@ export default function PokemonResultsView({ title, results, targetNames, target
                         maxWidth={220}
                       >
                         <span style={{
-                          background: '#f0f0f0', borderRadius: '5px', padding: '2px 7px',
+                          background: hasSpecs ? '#ebf8ff' : '#f0f0f0',
+                          border: hasSpecs ? '1px solid #90cdf4' : '1px solid transparent',
+                          borderRadius: '5px', padding: '2px 7px',
                           fontSize: '12px', fontWeight: 600, cursor: 'help',
                           display: 'inline-flex', alignItems: 'center', gap: '4px',
                         }}>
                           SpA <span style={{ color: '#333' }}>{pokemon.stats.spa}</span>
-                          {spaStage !== 0 && (
+                          {showEffective && (
                             <span style={{ color: '#999', fontWeight: 400 }}>({effectiveSpa})</span>
                           )}
                         </span>
@@ -892,6 +916,9 @@ export default function PokemonResultsView({ title, results, targetNames, target
                   {/* Speed chip */}
                   {(() => {
                     const uninvestedSpe = calcStat(pokemon.stats.spe, 0);
+                    const hasScarf = choiceItem === 'scarf';
+                    const speAfterStage = atkSpeStage !== 0 ? Math.floor(uninvestedSpe * stageMult(atkSpeStage)) : uninvestedSpe;
+                    const speModified = atkSpeStage !== 0 || hasScarf;
                     return (
                   <Tooltip
                     content={
@@ -900,10 +927,15 @@ export default function PokemonResultsView({ title, results, targetNames, target
                           Speed (uninvested L50){filters.trickRoom && <span style={{ marginLeft: '6px', color: '#b794f4', fontSize: '10px' }}>🔮 Trick Room</span>}
                         </div>
                         <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.spe} · EVs: 0 · IVs: 31</div>
-                        <div style={{ color: '#68d391', fontWeight: 700, marginBottom: atkSpeStage !== 0 ? '2px' : '7px' }}>→ {uninvestedSpe} Speed</div>
+                        <div style={{ color: '#68d391', fontWeight: 700, marginBottom: speModified ? '2px' : '7px' }}>→ {uninvestedSpe} Speed</div>
                         {atkSpeStage !== 0 && (
-                          <div style={{ color: atkSpeStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginBottom: '7px' }}>
-                            Stage {atkSpeStage > 0 ? `+${atkSpeStage}` : atkSpeStage}: → {attackerSpe} effective
+                          <div style={{ color: atkSpeStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginBottom: hasScarf ? '2px' : '7px' }}>
+                            Stage {atkSpeStage > 0 ? `+${atkSpeStage}` : atkSpeStage}: → {speAfterStage} Speed
+                          </div>
+                        )}
+                        {hasScarf && (
+                          <div style={{ color: '#f6ad55', fontWeight: 700, marginBottom: '7px' }}>
+                            Choice Scarf ×1.5: → {attackerSpe} effective
                           </div>
                         )}
                         {targetSpeeds.map((ts, i) => {
@@ -941,15 +973,15 @@ export default function PokemonResultsView({ title, results, targetNames, target
                     maxWidth={220}
                   >
                     <span style={{
-                      background: filters.trickRoom ? '#f3f0ff' : '#f0f0f0',
-                      border: filters.trickRoom ? '1px solid #c4b5fd' : '1px solid transparent',
+                      background: hasScarf ? '#fffaf0' : filters.trickRoom ? '#f3f0ff' : '#f0f0f0',
+                      border: hasScarf ? '1px solid #f6ad55' : filters.trickRoom ? '1px solid #c4b5fd' : '1px solid transparent',
                       borderRadius: '5px', padding: '2px 7px',
                       fontSize: '12px', fontWeight: 600, cursor: 'help',
                       display: 'inline-flex', alignItems: 'center', gap: '4px',
                     }}>
                       {filters.trickRoom && <span style={{ fontSize: '10px' }}>🔮</span>}
                       Spe <span style={{ color: '#333' }}>{pokemon.stats.spe}</span>
-                      {atkSpeStage !== 0 && (
+                      {speModified && (
                         <span style={{ color: '#999', fontWeight: 400 }}>({attackerSpe})</span>
                       )}
                       {targetSpeeds.length > 0 && (() => {
@@ -977,7 +1009,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
                     // Already outspeeds at 0 EVs neutral → no chip
                     if (attackerSpe > worstTarget) return null;
 
-                    const atkSpeMult = stageMult(atkSpeStage);
+                    const atkSpeMult = stageMult(atkSpeStage) * scarfMult;
                     const evNeutral = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.0, atkSpeMult);
                     const evPlus    = minSpeedEVs(pokemon.stats.spe, worstTarget, 1.1, atkSpeMult);
 
@@ -1002,8 +1034,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
                         <div style={{ fontWeight: 700, marginBottom: '7px' }}>Speed Investment Needed</div>
                         {targetSpeeds.map((ts, i) => {
                           const alreadyOutspeeds = attackerSpe > ts;
-                          const enN = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.0, stageMult(atkSpeStage));
-                          const enP = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.1, stageMult(atkSpeStage));
+                          const enN = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.0, stageMult(atkSpeStage) * scarfMult);
+                          const enP = alreadyOutspeeds ? null : minSpeedEVs(pokemon.stats.spe, ts, 1.1, stageMult(atkSpeStage) * scarfMult);
                           const cantAtAll = !alreadyOutspeeds && enN === null && enP === null;
                           return (
                             <div key={i} style={{ marginBottom: '6px' }}>
@@ -1642,6 +1674,7 @@ function StatChangesDropdown({
   spaStage, onSpaStageChange,
   atkDefStage, onAtkDefStageChange,
   atkSpeStage, onAtkSpeStageChange,
+  choiceItem, onChoiceItemChange,
 }: {
   atkStage: number;
   onAtkStageChange: (v: number) => void;
@@ -1651,6 +1684,8 @@ function StatChangesDropdown({
   onAtkDefStageChange: (v: number) => void;
   atkSpeStage: number;
   onAtkSpeStageChange: (v: number) => void;
+  choiceItem: 'band' | 'scarf' | 'specs' | null;
+  onChoiceItemChange: (v: 'band' | 'scarf' | 'specs' | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -1664,12 +1699,13 @@ function StatChangesDropdown({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const activeCount = (atkStage !== 0 ? 1 : 0) + (spaStage !== 0 ? 1 : 0) + (atkDefStage !== 0 ? 1 : 0) + (atkSpeStage !== 0 ? 1 : 0);
+  const activeCount = (atkStage !== 0 ? 1 : 0) + (spaStage !== 0 ? 1 : 0) + (atkDefStage !== 0 ? 1 : 0) + (atkSpeStage !== 0 ? 1 : 0) + (choiceItem !== null ? 1 : 0);
 
-  const sectionLabel: React.CSSProperties = {
-    fontSize: '10px', fontWeight: 700, textTransform: 'uppercase',
-    letterSpacing: '0.06em', color: '#aaa', marginBottom: '6px',
-  };
+  const CHOICE_ITEMS: { key: 'band' | 'scarf' | 'specs'; label: string; desc: string; tooltip: string; identifier: string; color: string }[] = [
+    { key: 'band',  label: 'Choice Band',  desc: 'Atk ×1.5', identifier: 'choice-band',  color: '#c53030', tooltip: 'Boosts the holder\'s Attack by ×1.5, but locks it into the first move used.' },
+    { key: 'scarf', label: 'Choice Scarf', desc: 'Spe ×1.5', identifier: 'choice-scarf', color: '#2b6cb0', tooltip: 'Boosts the holder\'s Speed by ×1.5, but locks it into the first move used. Affects all outspeed comparisons and speed chip values.' },
+    { key: 'specs', label: 'Choice Specs', desc: 'SpA ×1.5', identifier: 'choice-specs', color: '#553c9a', tooltip: 'Boosts the holder\'s Sp. Atk by ×1.5, but locks it into the first move used.' },
+  ];
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
@@ -1684,9 +1720,9 @@ function StatChangesDropdown({
         }}
       >
         {activeCount > 0 && (
-          <Tooltip content="Reset all stat stages" side="top">
+          <Tooltip content="Reset all stat changes" side="top">
             <span
-              onClick={e => { e.stopPropagation(); onAtkStageChange(0); onSpaStageChange(0); onAtkDefStageChange(0); onAtkSpeStageChange(0); }}
+              onClick={e => { e.stopPropagation(); onAtkStageChange(0); onSpaStageChange(0); onAtkDefStageChange(0); onAtkSpeStageChange(0); onChoiceItemChange(null); }}
               style={{ color: '#276749', fontWeight: 800, lineHeight: 1, padding: '0 2px' }}
             >✕</span>
           </Tooltip>
@@ -1708,13 +1744,54 @@ function StatChangesDropdown({
           background: '#fff', border: '1px solid #e2e8f0',
           borderRadius: '10px', padding: '14px 16px',
           boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-          minWidth: '180px',
+          minWidth: '200px',
         }}>
           <div style={{ display: 'grid', gridTemplateColumns: '32px 22px 36px 22px 16px', gap: '5px 6px', alignItems: 'center' }}>
             <AttackerStageStepper label="Atk" value={atkStage} onChange={onAtkStageChange} />
             <AttackerStageStepper label="Def" value={atkDefStage} onChange={onAtkDefStageChange} labelTooltip="Used by Body Press, which deals damage based on the attacker's Defense stat." />
             <AttackerStageStepper label="SpA" value={spaStage} onChange={onSpaStageChange} />
             <AttackerStageStepper label="Spe" value={atkSpeStage} onChange={onAtkSpeStageChange} />
+          </div>
+
+          <div style={{ borderTop: '1px solid #f0f0f0', marginTop: '10px', paddingTop: '10px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#aaa', marginBottom: '7px' }}>
+              Choice Item
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              {CHOICE_ITEMS.map(({ key, label, desc, tooltip, identifier, color }) => {
+                const checked = choiceItem === key;
+                return (
+                  <Tooltip key={key} content={tooltip} side="left" maxWidth={220}>
+                    <label
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        cursor: 'pointer', padding: '4px 6px', borderRadius: '5px',
+                        background: checked ? `${color}10` : 'transparent',
+                        border: `1px solid ${checked ? color : 'transparent'}`,
+                        transition: 'all 0.1s',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => onChoiceItemChange(checked ? null : key)}
+                        style={{ accentColor: color, width: '13px', height: '13px', flexShrink: 0 }}
+                      />
+                      <img
+                        src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${identifier}.png`}
+                        alt={label}
+                        width={20} height={20}
+                        style={{ imageRendering: 'pixelated', flexShrink: 0 }}
+                      />
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: checked ? color : '#333', lineHeight: 1.2 }}>{label}</div>
+                        <div style={{ fontSize: '10px', color: '#999', lineHeight: 1.2 }}>{desc}</div>
+                      </div>
+                    </label>
+                  </Tooltip>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

@@ -155,6 +155,7 @@ export default function App() {
   const [spaStage, setSpaStage] = useState(0);
   const [atkDefStage, setAtkDefStage] = useState(0);
   const [atkSpeStage, setAtkSpeStage] = useState(0);
+  const [choiceItem, setChoiceItem] = useState<'band' | 'scarf' | 'specs' | null>(null);
 
   useEffect(() => {
     loadGameData()
@@ -257,27 +258,31 @@ export default function App() {
     .map(s => {
       const base = calcStat(s.pokemon!.stats.spe, s.evs.spe, 31, 50, getNatureMult(s.nature, 'spe'));
       const afterStage = Math.floor(base * stageMult(s.speStage));
-      return s.tailwind ? afterStage * 2 : afterStage;
+      const afterScarf = Math.floor(afterStage * (s.heldItem?.speedMult ?? 1.0));
+      return s.tailwind ? afterScarf * 2 : afterScarf;
     });
 
-  // Speeds of targets with mustOutspeed checked (also stage- and Tailwind-aware)
+  // Speeds of targets with mustOutspeed checked (also stage-, Scarf-, and Tailwind-aware)
   const mustOutspeedSpeeds: number[] = slots
     .filter(s => s.pokemon !== null && s.mustOutspeed)
     .map(s => {
       const base = calcStat(s.pokemon!.stats.spe, s.evs.spe, 31, 50, getNatureMult(s.nature, 'spe'));
       const afterStage = Math.floor(base * stageMult(s.speStage));
-      return s.tailwind ? afterStage * 2 : afterStage;
+      const afterScarf = Math.floor(afterStage * (s.heldItem?.speedMult ?? 1.0));
+      return s.tailwind ? afterScarf * 2 : afterScarf;
     });
 
   useEffect(() => {
     if (!data || activeTargets.length === 0) { setResults([]); return; }
     setComputing(true);
     setTimeout(() => {
-      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage));
+      const atkItemMult = choiceItem === 'band'  ? 1.5 : 1.0;
+      const spaItemMult = choiceItem === 'specs' ? 1.5 : 1.0;
+      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult));
       setComputing(false);
     }, 10);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, slots, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage]);
+  }, [data, slots, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, choiceItem]);
 
   /* ── slot helpers ── */
   const updateSlot = (id: number, patch: Partial<TargetSlot>) =>
@@ -654,6 +659,8 @@ export default function App() {
                   onAtkDefStageChange={setAtkDefStage}
                   atkSpeStage={atkSpeStage}
                   onAtkSpeStageChange={setAtkSpeStage}
+                  choiceItem={choiceItem}
+                  onChoiceItemChange={setChoiceItem}
                   isDoubles={isDoubles}
                 />
               </div>
@@ -676,6 +683,8 @@ export default function App() {
 
 function heldItemDescription(item: TargetHeldItem, data: GameData): string {
   const parts: string[] = [];
+  if (item.speedMult > 1)
+    parts.push(`Boosts Speed by ${Math.round((item.speedMult - 1) * 100)}% — affects all outspeed comparisons`);
   if (item.defMult > 1 && item.spdMult > 1)
     parts.push(`Boosts Def and Sp. Def by ${Math.round((item.defMult - 1) * 100)}%`);
   else if (item.defMult > 1)
@@ -693,6 +702,10 @@ function heldItemDescription(item: TargetHeldItem, data: GameData): string {
 
 // Group TARGET_HELD_ITEMS into categories for the dropdown
 const HELD_ITEM_GROUPS: { label: string; items: typeof TARGET_HELD_ITEMS }[] = [
+  {
+    label: 'Speed',
+    items: TARGET_HELD_ITEMS.filter(i => i.speedMult > 1),
+  },
   {
     label: 'Stat Boosts',
     items: TARGET_HELD_ITEMS.filter(i => i.defMult > 1 || i.spdMult > 1),
@@ -746,7 +759,8 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
   const spd    = selected ? calcStat(selected.stats.spd, evs.spd, 31, 50, getNatureMult(nature, 'spd')) : 0;
   const baseSpe = selected ? calcStat(selected.stats.spe, evs.spe, 31, 50, getNatureMult(nature, 'spe')) : 0;
   const speAfterStage = selected ? Math.floor(baseSpe * stageMult(speStage)) : 0;
-  const spe    = tailwind ? speAfterStage * 2 : speAfterStage;
+  const speAfterScarf = selected ? Math.floor(speAfterStage * (heldItem?.speedMult ?? 1.0)) : 0;
+  const spe    = tailwind ? speAfterScarf * 2 : speAfterScarf;
   const atkEff = selected ? Math.floor(atk * stageMult(atkStage)) : 0;
   const defEff = selected ? Math.floor(def * stageMult(defStage)) : 0;
   const spdEff = selected ? Math.floor(spd * stageMult(spdStage)) : 0;
@@ -882,7 +896,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                   label="Spe"
                   base={selected.stats.spe}
                   computed={baseSpe}
-                  effective={speStage !== 0 || tailwind ? spe : undefined}
+                  effective={speStage !== 0 || (heldItem?.speedMult ?? 1) > 1 || tailwind ? spe : undefined}
                   stage={speStage !== 0 ? speStage : undefined}
                   tooltip={
                     <div>
@@ -890,7 +904,8 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                       <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.spe} · EVs: {evs.spe} · IVs: 31</div>
                       <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {speNatLabel}</div>
                       <div style={{ color: '#68d391', fontWeight: 700 }}>→ {baseSpe} Speed</div>
-                      {speStage !== 0 && <div style={{ color: speStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginTop: '2px' }}>Stage {speStage > 0 ? `+${speStage}` : speStage}: → {speAfterStage} effective</div>}
+                      {speStage !== 0 && <div style={{ color: speStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginTop: '2px' }}>Stage {speStage > 0 ? `+${speStage}` : speStage}: → {speAfterStage} Speed</div>}
+                      {(heldItem?.speedMult ?? 1) > 1 && <div style={{ color: '#68d391', fontWeight: 700, marginTop: '2px' }}>Choice Scarf ×1.5: → {speAfterScarf} Speed</div>}
                       {tailwind && <div style={{ color: '#90cdf4', fontWeight: 700, marginTop: '2px' }}>Tailwind ×2: → {spe} effective</div>}
                     </div>
                   }
@@ -1252,7 +1267,7 @@ function StatPill({ label, base, computed, effective, stage, tooltip }: {
   stage?: number;
   tooltip?: React.ReactNode;
 }) {
-  const displayed = (effective !== undefined && stage !== undefined && stage !== 0) ? effective : computed;
+  const displayed = effective !== undefined ? effective : computed;
   const pill = (
     <span style={{
       background: '#efefef', borderRadius: '5px', padding: '2px 6px',

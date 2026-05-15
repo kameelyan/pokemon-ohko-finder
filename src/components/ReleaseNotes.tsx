@@ -5,6 +5,32 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.8.1',
+    date: 'May 2026',
+    title: 'Choice Items',
+    sections: [
+      {
+        heading: '🎽 Choice Items for Attackers',
+        items: [
+          'Choice Band, Choice Scarf, and Choice Specs can now be selected in the Stat Changes dropdown for the attacker.',
+          'Each item applies a ×1.5 multiplier to the relevant stat — Attack, Speed, or Sp. Atk respectively.',
+          'Selecting one automatically deselects the others. The active item is highlighted and counted in the dropdown badge.',
+          'Choice Band does not apply to Foul Play (uses target\'s Attack) or Body Press (uses attacker\'s Defense).',
+          'Item icons from the Pokédex are shown alongside each option, with a tooltip describing the mechanic.',
+          'When active, the corresponding Atk, SpA, or Spe chip on each result card shows the boosted effective value and a breakdown line in the tooltip.',
+        ],
+      },
+      {
+        heading: '🎽 Choice Scarf for Targets',
+        items: [
+          'Choice Scarf has been added to the target Pokémon held item dropdown under a new "Speed" category.',
+          'When selected, the target\'s Speed is multiplied by ×1.5 in all outspeed comparisons, the speed chip, and the "Must outspeed" filter.',
+          'The Spe stat pill in the target panel shows the scarf-adjusted speed in the tooltip and as the effective value in the chip.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.8.0',
     date: 'May 2026',
     title: 'Stat Stages, Body Press & Psyshock Support',
