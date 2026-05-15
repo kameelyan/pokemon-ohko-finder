@@ -5,6 +5,24 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.7.2',
+    date: 'May 2026',
+    title: 'Mobile Experience Improvements',
+    sections: [
+      {
+        heading: '📱 Mobile Fixes',
+        items: [
+          'Target Pokémon panels no longer overflow their container on narrow screens — the grid now collapses to a single column on small viewports.',
+          'Main page padding scales down on narrow screens so content has more room to breathe.',
+          'EV input boxes wrap onto a second row on mobile rather than overflowing the panel.',
+          'The results controls bar (search + sort) now wraps cleanly on narrow screens instead of overflowing.',
+          'Move tables in expanded results are now horizontally scrollable on mobile, so all columns are reachable without the page overflowing.',
+          'The filter panel is now capped at 70% of the viewport height and scrolls independently — no more having to scroll through all results just to reach the bottom of the filters.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.7.1',
     date: 'May 2026',
     title: 'Form Filters, Search Polish & Bug Fixes',
