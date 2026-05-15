@@ -9,10 +9,11 @@ const GRAVITY_UNUSABLE_MOVE_IDS = new Set([19, 26, 136, 340, 507]);
 /**
  * Foul Play uses the *target's* Attack stat instead of the attacker's.
  */
-const FOUL_PLAY_MOVE_ID = 492;
+export const FOUL_PLAY_MOVE_ID = 492;
 
 export interface EVSpread {
   hp: number;
+  atk: number;
   def: number;
   spd: number;
   spe: number;
@@ -210,6 +211,8 @@ export interface OHKOMoveInfo {
   abilityMod?: { identifier: string; name: string; isHidden: boolean };
   /** Weather condition that was required for this OHKO (absent = works without weather). */
   weatherRequired?: Exclude<Weather, 'none'>;
+  /** For Foul Play only: the target's Attack stat that was used in the damage calculation. */
+  foulPlayAtk?: number;
   coveredTargetIndices: number[];
 }
 
@@ -423,7 +426,7 @@ export function findPokemonOHKOs(
   const targetStats: TargetStats[] = targets.map(t => ({
     pokemon: t.pokemon,
     hp: calcHP(t.pokemon.stats.hp, t.evs.hp),
-    atk: calcStat(t.pokemon.stats.atk, 0, 31, 50, 1.0),
+    atk: calcStat(t.pokemon.stats.atk, t.evs.atk, 31, 50, 1.0),
     def: calcStat(t.pokemon.stats.def, t.evs.def, 31, 50, t.defNature ?? 1.0),
     spd: calcStat(t.pokemon.stats.spd, t.evs.spd, 31, 50, t.spdNature ?? 1.0),
     defMult: t.heldItem?.defMult ?? 1.0,
@@ -529,6 +532,7 @@ export function findPokemonOHKOs(
           item: chosen.item,
           abilityMod: abilityRequired,
           weatherRequired,
+          foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? ts.atk : undefined,
           coveredTargetIndices: [],
         });
       }

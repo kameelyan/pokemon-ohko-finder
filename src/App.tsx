@@ -10,7 +10,7 @@ import TypeBadge from './components/TypeBadge';
 import Tooltip from './components/Tooltip';
 import { APP_VERSION } from './version';
 
-const DEFAULT_EVS: EVSpread = { hp: 0, def: 0, spd: 0, spe: 0 };
+const DEFAULT_EVS: EVSpread = { hp: 0, atk: 0, def: 0, spd: 0, spe: 0 };
 
 // ── Natures ──────────────────────────────────────────────────────────────────
 
@@ -802,6 +802,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
 
           <div style={{ display: 'flex', gap: '8px' }}>
             <EVInput label="HP EVs"  value={evs.hp}  onChange={v => onEvsChange({ ...evs, hp: v })} />
+            <EVInput label="Atk EVs" value={evs.atk} onChange={v => onEvsChange({ ...evs, atk: v })} />
             <EVInput label="Def EVs" value={evs.def} onChange={v => onEvsChange({ ...evs, def: v })} />
             <EVInput label="SpD EVs" value={evs.spd} onChange={v => onEvsChange({ ...evs, spd: v })} />
             <EVInput label="Spe EVs" value={evs.spe} onChange={v => onEvsChange({ ...evs, spe: v })} />

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { PokemonOHKOResult, OHKOMoveInfo, Weather, Terrain } from '../calc/damage';
-import { WEATHER_INFO, TERRAIN_INFO } from '../calc/damage';
+import { WEATHER_INFO, TERRAIN_INFO, FOUL_PLAY_MOVE_ID } from '../calc/damage';
 import type { MoveFlag } from '../data/types';
 import { calcStat } from '../calc/damage';
 import type { GameData, Pokemon } from '../data/types';
@@ -214,6 +214,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [sortKey, setSortKey] = useState<SortKey>('bst');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [search, setSearch] = useState('');
 
   const toggle = (id: number) =>
     setExpandedIds(prev => {
@@ -305,8 +306,16 @@ export default function PokemonResultsView({ title, results, targetNames, target
         : (av as number) - (bv as number);
       return sortDir === 'asc' ? cmp : -cmp;
     });
+    // Apply search filter
+    const q = search.trim().toLowerCase();
+    if (q) {
+      return arr.filter(r =>
+        r.pokemon.name.toLowerCase().includes(q) ||
+        r.movesPerTarget.some(moves => moves.some(m => m.move.name.toLowerCase().includes(q)))
+      );
+    }
     return arr;
-  }, [filteredResults, sortKey, sortDir]);
+  }, [filteredResults, sortKey, sortDir, search]);
 
   const expandAll = () => setExpandedIds(new Set(sortedResults.map(r => r.pokemon.id)));
   const collapseAll = () => setExpandedIds(new Set());
@@ -394,6 +403,20 @@ export default function PokemonResultsView({ title, results, targetNames, target
             {sortDir === 'asc' ? '↑' : '↓'}
           </button>
         </div>
+
+        {/* Search — centre */}
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by Pokémon or move name…"
+          style={{
+            flex: '1 1 180px', maxWidth: '260px',
+            fontSize: '12px', padding: '5px 10px',
+            border: '1px solid #ddd', borderRadius: '6px',
+            background: '#fff', color: '#333', outline: 'none',
+          }}
+        />
 
         {/* Battle Effects + Filters + expand/collapse — far right */}
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1087,6 +1110,23 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
                     </Tooltip>
                   );
                 })()}
+                {/* Foul Play chip — shows the target's Attack stat used in the calculation */}
+                {m.move.id === FOUL_PLAY_MOVE_ID && m.foulPlayAtk !== undefined && (
+                  <Tooltip
+                    content={`Foul Play uses the target's Attack stat (${m.foulPlayAtk}), not the attacker's.`}
+                    side="bottom"
+                  >
+                    <span style={{
+                      marginLeft: '4px', fontSize: '10px', fontWeight: 700, cursor: 'help',
+                      background: '#faf5ff', color: '#553c9a',
+                      border: '1px solid #b794f4',
+                      borderRadius: '3px', padding: '1px 5px',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      ↩ Atk: {m.foulPlayAtk}
+                    </span>
+                  </Tooltip>
+                )}
                 {/* Ability chip — shown when an ability modifier is factored into this move's damage */}
                 {m.abilityMod && (
                   <Tooltip
