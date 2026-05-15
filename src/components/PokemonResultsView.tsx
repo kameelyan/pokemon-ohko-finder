@@ -735,7 +735,6 @@ export default function PokemonResultsView({ title, results, targetNames, target
                 borderRadius: '10px',
                 background: '#fff',
                 minWidth: 0,
-                overflow: 'hidden',
               }}
             >
               {/* Clickable header */}
