@@ -1004,6 +1004,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
                       key={ti}
                       style={{
                         flex: '1 1 300px',
+                        minWidth: 0,
                         borderRight: ti < movesPerTarget.length - 1 ? '1px solid #eee' : 'none',
                         padding: '12px 16px',
                       }}
