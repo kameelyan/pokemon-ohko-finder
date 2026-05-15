@@ -817,7 +817,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
             })()}
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <EVInput label="HP EVs"  value={evs.hp}  onChange={v => onEvsChange({ ...evs, hp: v })} />
             <EVInput label="Atk EVs" value={evs.atk} onChange={v => onEvsChange({ ...evs, atk: v })} />
             <EVInput label="Def EVs" value={evs.def} onChange={v => onEvsChange({ ...evs, def: v })} />
@@ -1074,12 +1074,12 @@ function AdditionalSettings({
 
 function EVInput({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
-    <div>
+    <div style={{ flex: '1 1 56px', minWidth: '52px', maxWidth: '72px' }}>
       <div style={{ fontSize: '10px', color: '#999', marginBottom: '2px' }}>{label}</div>
       <input
         type="number" min={0} max={252} step={4} value={value}
         onChange={e => onChange(Math.min(252, Math.max(0, Number(e.target.value))))}
-        style={{ width: '62px', padding: '4px 6px', border: '1px solid #ddd', borderRadius: '5px', fontSize: '12px', background: '#fff' }}
+        style={{ width: '100%', padding: '4px 6px', border: '1px solid #ddd', borderRadius: '5px', fontSize: '12px', background: '#fff' }}
       />
     </div>
   );
