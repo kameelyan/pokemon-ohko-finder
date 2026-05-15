@@ -46,6 +46,8 @@ export interface EVSpread {
   hp: number;
   atk: number;
   def: number;
+  /** Sp. Atk investment — used only for total-SP validation in Champions SP mode; does not affect defensive calcs. */
+  spa: number;
   spd: number;
   spe: number;
 }
@@ -344,8 +346,10 @@ function minEVsToOHKO(
   guaranteed: boolean,
   itemMult = 1.0,
   atkStageMult = 1.0,
+  step = 4,
+  maxEV = 252,
 ): number | null {
-  for (let ev = 0; ev <= 252; ev += 4) {
+  for (let ev = 0; ev <= maxEV; ev += step) {
     const atk = Math.floor(calcStat(atkBase, ev, 31, 50, 1.0) * atkStageMult);
     const { min, max } = damageSingle(power, atk, def, stabFactor, effFactor, itemMult);
     if (guaranteed ? min >= targetHP : max >= targetHP) return ev;

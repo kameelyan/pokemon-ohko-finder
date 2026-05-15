@@ -10,7 +10,8 @@ import TypeBadge from './components/TypeBadge';
 import Tooltip from './components/Tooltip';
 import { APP_VERSION } from './version';
 
-const DEFAULT_EVS: EVSpread = { hp: 0, atk: 0, def: 0, spd: 0, spe: 0 };
+const DEFAULT_EVS: EVSpread = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+const STAT_MODE_KEY = 'ohko-stat-mode';
 
 // ── Natures ──────────────────────────────────────────────────────────────────
 
@@ -156,6 +157,10 @@ export default function App() {
   const [atkDefStage, setAtkDefStage] = useState(0);
   const [atkSpeStage, setAtkSpeStage] = useState(0);
   const [choiceItem, setChoiceItem] = useState<'band' | 'scarf' | 'specs' | null>(null);
+  const [statMode, setStatMode] = useState<'ev' | 'sp'>(() => {
+    const saved = localStorage.getItem(STAT_MODE_KEY);
+    return saved === 'sp' ? 'sp' : 'ev';
+  });
 
   useEffect(() => {
     loadGameData()
@@ -217,6 +222,11 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   }, [slots]);
 
+  // Persist stat mode
+  useEffect(() => {
+    localStorage.setItem(STAT_MODE_KEY, statMode);
+  }, [statMode]);
+
   const pokemonList = useMemo(() => {
     if (!data) return [];
     return Array.from(data.pokemon.values()).sort((a, b) => {
@@ -230,16 +240,21 @@ export default function App() {
   // When Champions mode is on, restrict the search list to roster Pokémon only
   const searchablePokemon = useMemo(() => {
     if (!data || !championsOnly) return pokemonList;
-    return pokemonList.filter(p => data.championsRoster.has(p.speciesId));
+    return pokemonList.filter(p => data.championsRoster.has(p.id));
   }, [pokemonList, championsOnly, data]);
 
   // Slots with a selected Pokémon
   const activeTargets: TargetConfig[] = slots
     .filter(s => s.pokemon !== null)
-    .map(s => ({
-      pokemon: s.pokemon!,
-      evs: s.evs,
-      heldItem: s.heldItem ?? undefined,
+    .map(s => {
+      // In SP mode, slot stores SP counts (0–32); multiply ×8 to get EVs for the calc engine
+      const evs: EVSpread = statMode === 'sp'
+        ? { hp: s.evs.hp * 8, atk: s.evs.atk * 8, def: s.evs.def * 8, spa: 0, spd: s.evs.spd * 8, spe: s.evs.spe * 8 }
+        : s.evs;
+      return {
+        pokemon: s.pokemon!,
+        evs,
+        heldItem: s.heldItem ?? undefined,
       reflect: s.reflect,
       lightScreen: s.lightScreen,
       atkNature: getNatureMult(s.nature, 'atk'),
@@ -250,13 +265,15 @@ export default function App() {
       atkStage: s.atkStage,
       defStage: s.defStage,
       spdStage: s.spdStage,
-    }));
+      };
+    });
 
   // EV-invested, nature-adjusted L50 speed for each active target (×stage ×2 under Tailwind)
   const targetSpeeds: number[] = slots
     .filter(s => s.pokemon !== null)
     .map(s => {
-      const base = calcStat(s.pokemon!.stats.spe, s.evs.spe, 31, 50, getNatureMult(s.nature, 'spe'));
+      const speEV = statMode === 'sp' ? s.evs.spe * 8 : s.evs.spe;
+      const base = calcStat(s.pokemon!.stats.spe, speEV, 31, 50, getNatureMult(s.nature, 'spe'));
       const afterStage = Math.floor(base * stageMult(s.speStage));
       const afterScarf = Math.floor(afterStage * (s.heldItem?.speedMult ?? 1.0));
       return s.tailwind ? afterScarf * 2 : afterScarf;
@@ -266,7 +283,8 @@ export default function App() {
   const mustOutspeedSpeeds: number[] = slots
     .filter(s => s.pokemon !== null && s.mustOutspeed)
     .map(s => {
-      const base = calcStat(s.pokemon!.stats.spe, s.evs.spe, 31, 50, getNatureMult(s.nature, 'spe'));
+      const speEV = statMode === 'sp' ? s.evs.spe * 8 : s.evs.spe;
+      const base = calcStat(s.pokemon!.stats.spe, speEV, 31, 50, getNatureMult(s.nature, 'spe'));
       const afterStage = Math.floor(base * stageMult(s.speStage));
       const afterScarf = Math.floor(afterStage * (s.heldItem?.speedMult ?? 1.0));
       return s.tailwind ? afterScarf * 2 : afterScarf;
@@ -282,7 +300,7 @@ export default function App() {
       setComputing(false);
     }, 10);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, slots, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, choiceItem]);
+  }, [data, slots, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, choiceItem, statMode]);
 
   /* ── slot helpers ── */
   const updateSlot = (id: number, patch: Partial<TargetSlot>) =>
@@ -511,34 +529,120 @@ export default function App() {
                   </Tooltip>
 
                   {/* Champions toggle */}
-                  <button
-                    onClick={() => setChampionsOnly(v => !v)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '7px',
-                      padding: '6px 14px',
-                      border: `1.5px solid ${championsOnly ? '#553c9a' : '#ddd'}`,
-                      borderRadius: '8px',
-                      background: championsOnly ? '#f3f0ff' : '#fff',
-                      color: championsOnly ? '#553c9a' : '#888',
-                      fontSize: '13px', fontWeight: 700, cursor: 'pointer',
-                      transition: 'all 0.15s',
-                    }}
+                  <Tooltip
+                    content={
+                      <div>
+                        <div style={{ fontWeight: 700, marginBottom: '5px' }}>Pokémon Champions Mode</div>
+                        <div style={{ color: '#ccc', marginBottom: '6px' }}>
+                          Restricts attacker results to Pokémon available in the Pokémon Champions roster.
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <span style={{ color: '#9f7aea', fontWeight: 700 }}>On</span> — only Pokémon in the Champions roster appear as potential OHKOers. The search box for targets also filters to roster Pokémon only.
+                        </div>
+                        <div>
+                          <span style={{ color: '#68d391', fontWeight: 700 }}>Off</span> — all Pokémon from the full Pokédex are considered.
+                        </div>
+                      </div>
+                    }
+                    maxWidth={280}
+                    side="bottom"
                   >
-                    <span>🏆</span>
-                    <span>Pokémon Champions</span>
-                    <span style={{
-                      width: '28px', height: '16px', borderRadius: '999px',
-                      background: championsOnly ? '#553c9a' : '#ddd',
-                      position: 'relative', flexShrink: 0, transition: 'background 0.15s',
-                    }}>
+                    <button
+                      onClick={() => setChampionsOnly(v => !v)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '7px',
+                        padding: '6px 14px',
+                        border: `1.5px solid ${championsOnly ? '#553c9a' : '#ddd'}`,
+                        borderRadius: '8px',
+                        background: championsOnly ? '#f3f0ff' : '#fff',
+                        color: championsOnly ? '#553c9a' : '#888',
+                        fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <span>🏆</span>
+                      <span>Pokémon Champions</span>
                       <span style={{
-                        position: 'absolute', top: '2px',
-                        left: championsOnly ? '14px' : '2px',
-                        width: '12px', height: '12px', borderRadius: '50%',
-                        background: '#fff', transition: 'left 0.15s',
-                      }} />
-                    </span>
-                  </button>
+                        width: '28px', height: '16px', borderRadius: '999px',
+                        background: championsOnly ? '#553c9a' : '#ddd',
+                        position: 'relative', flexShrink: 0, transition: 'background 0.15s',
+                      }}>
+                        <span style={{
+                          position: 'absolute', top: '2px',
+                          left: championsOnly ? '14px' : '2px',
+                          width: '12px', height: '12px', borderRadius: '50%',
+                          background: '#fff', transition: 'left 0.15s',
+                        }} />
+                      </span>
+                    </button>
+                  </Tooltip>
+
+                  {/* Stat mode toggle: EVs ↔ SPs */}
+                  <Tooltip
+                    content={
+                      <div>
+                        <div style={{ fontWeight: 700, marginBottom: '5px' }}>Stat Investment Mode</div>
+                        <div style={{ color: '#ccc', marginBottom: '6px' }}>
+                          Switch between standard EVs and Pokémon Champions Stat Points (SPs).
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <span style={{ color: '#68d391', fontWeight: 700 }}>EVs</span> — Standard competitive (0–252, step 4, max 506 total)
+                        </div>
+                        <div>
+                          <span style={{ color: '#9f7aea', fontWeight: 700 }}>SPs</span> — Pokémon Champions (0–32 per stat, max 66 total). 1 SP = 8 EVs exactly.
+                        </div>
+                      </div>
+                    }
+                    maxWidth={280}
+                    side="bottom"
+                  >
+                    <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: `1.5px solid ${statMode === 'sp' ? '#553c9a' : '#ddd'}`, cursor: 'pointer' }}>
+                      {(['ev', 'sp'] as const).map(mode => {
+                        const active = mode === statMode;
+                        return (
+                          <button
+                            key={mode}
+                            onClick={() => {
+                              if (mode === statMode) return;
+                              // Convert EV values to SP counts (or vice versa) on switch
+                              setSlots(prev => prev.map(s => {
+                                if (mode === 'sp') {
+                                  // EV → SP: divide by 8, clamp to [0, 32]
+                                  return { ...s, evs: {
+                                    hp:  Math.min(32, Math.round(s.evs.hp  / 8)),
+                                    atk: Math.min(32, Math.round(s.evs.atk / 8)),
+                                    def: Math.min(32, Math.round(s.evs.def / 8)),
+                                    spa: Math.min(32, Math.round((s.evs.spa ?? 0) / 8)),
+                                    spd: Math.min(32, Math.round(s.evs.spd / 8)),
+                                    spe: Math.min(32, Math.round(s.evs.spe / 8)),
+                                  }};
+                                } else {
+                                  // SP → EV: multiply by 8, clamp to [0, 252]
+                                  return { ...s, evs: {
+                                    hp:  Math.min(252, s.evs.hp  * 8),
+                                    atk: Math.min(252, s.evs.atk * 8),
+                                    def: Math.min(252, s.evs.def * 8),
+                                    spa: 0,
+                                    spd: Math.min(252, s.evs.spd * 8),
+                                    spe: Math.min(252, s.evs.spe * 8),
+                                  }};
+                                }
+                              }));
+                              setStatMode(mode);
+                            }}
+                            style={{
+                              padding: '6px 14px', fontSize: '13px', fontWeight: 700,
+                              border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+                              background: active ? '#553c9a' : '#fff',
+                              color: active ? '#fff' : '#aaa',
+                            }}
+                          >
+                            {mode.toUpperCase()}s
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Tooltip>
                 </div>
               </div>
 
@@ -584,6 +688,7 @@ export default function App() {
                     onSpeStageChange={v => updateSlot(slot.id, { speStage: v })}
                     isDoubles={isDoubles}
                     data={data!}
+                    statMode={statMode}
                   />
                 ))}
 
@@ -662,6 +767,7 @@ export default function App() {
                   choiceItem={choiceItem}
                   onChoiceItemChange={setChoiceItem}
                   isDoubles={isDoubles}
+                  statMode={statMode}
                 />
               </div>
             )}
@@ -720,7 +826,7 @@ const HELD_ITEM_GROUPS: { label: string; items: typeof TARGET_HELD_ITEMS }[] = [
   },
 ];
 
-function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, reflect, lightScreen, nature, tailwind, onTailwindChange, friendGuard, onFriendGuardChange, atkStage, onAtkStageChange, defStage, onDefStageChange, spdStage, onSpdStageChange, speStage, onSpeStageChange, isDoubles, onSelect, onRemove, onEvsChange, onMustOutspeedChange, onHeldItemChange, onReflectChange, onLightScreenChange, onNatureChange, data }: {
+function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, reflect, lightScreen, nature, tailwind, onTailwindChange, friendGuard, onFriendGuardChange, atkStage, onAtkStageChange, defStage, onDefStageChange, spdStage, onSpdStageChange, speStage, onSpeStageChange, isDoubles, onSelect, onRemove, onEvsChange, onMustOutspeedChange, onHeldItemChange, onReflectChange, onLightScreenChange, onNatureChange, data, statMode }: {
   label: string;
   pokemon: Pokemon[];
   selected: Pokemon | null;
@@ -752,12 +858,15 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
   onLightScreenChange: (v: boolean) => void;
   onNatureChange: (n: string) => void;
   data: GameData;
+  statMode: 'ev' | 'sp';
 }) {
-  const hp     = selected ? calcHP(selected.stats.hp, evs.hp) : 0;
-  const atk    = selected ? calcStat(selected.stats.atk, evs.atk, 31, 50, getNatureMult(nature, 'atk')) : 0;
-  const def    = selected ? calcStat(selected.stats.def, evs.def, 31, 50, getNatureMult(nature, 'def')) : 0;
-  const spd    = selected ? calcStat(selected.stats.spd, evs.spd, 31, 50, getNatureMult(nature, 'spd')) : 0;
-  const baseSpe = selected ? calcStat(selected.stats.spe, evs.spe, 31, 50, getNatureMult(nature, 'spe')) : 0;
+  // In SP mode the slot stores SP counts (0–32); scale to EVs for calc functions
+  const evScale = statMode === 'sp' ? 8 : 1;
+  const hp     = selected ? calcHP(selected.stats.hp, evs.hp * evScale) : 0;
+  const atk    = selected ? calcStat(selected.stats.atk, evs.atk * evScale, 31, 50, getNatureMult(nature, 'atk')) : 0;
+  const def    = selected ? calcStat(selected.stats.def, evs.def * evScale, 31, 50, getNatureMult(nature, 'def')) : 0;
+  const spd    = selected ? calcStat(selected.stats.spd, evs.spd * evScale, 31, 50, getNatureMult(nature, 'spd')) : 0;
+  const baseSpe = selected ? calcStat(selected.stats.spe, evs.spe * evScale, 31, 50, getNatureMult(nature, 'spe')) : 0;
   const speAfterStage = selected ? Math.floor(baseSpe * stageMult(speStage)) : 0;
   const speAfterScarf = selected ? Math.floor(speAfterStage * (heldItem?.speedMult ?? 1.0)) : 0;
   const spe    = tailwind ? speAfterScarf * 2 : speAfterScarf;
@@ -817,7 +926,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
             <StatPill label="HP" base={selected.stats.hp} computed={hp} tooltip={
               <div>
                 <div style={{ fontWeight: 700, marginBottom: '5px' }}>HP Stat at Lv. 50</div>
-                <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Base: {selected.stats.hp} · EVs: {evs.hp} · IVs: 31</div>
+                <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Base: {selected.stats.hp} · {statMode === 'sp' ? `SPs: ${evs.hp}` : `EVs: ${evs.hp}`} · IVs: 31</div>
                 <div style={{ color: '#68d391', fontWeight: 700 }}>→ {hp} HP</div>
               </div>
             } />
@@ -834,7 +943,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                   tooltip={
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: '5px' }}>Attack Stat at Lv. 50</div>
-                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.atk} · EVs: {evs.atk} · IVs: 31</div>
+                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.atk} · {statMode === 'sp' ? `SPs: ${evs.atk}` : `EVs: ${evs.atk}`} · IVs: 31</div>
                       <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {atkNatLabel}</div>
                       <div style={{ color: '#68d391', fontWeight: 700 }}>→ {atk} Attack</div>
                       {atkStage !== 0 && <div style={{ color: atkStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginTop: '2px' }}>Stage {atkStage > 0 ? `+${atkStage}` : atkStage}: → {atkEff} effective</div>}
@@ -857,7 +966,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                   tooltip={
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: '5px' }}>Defense Stat at Lv. 50</div>
-                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.def} · EVs: {evs.def} · IVs: 31</div>
+                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.def} · {statMode === 'sp' ? `SPs: ${evs.def}` : `EVs: ${evs.def}`} · IVs: 31</div>
                       <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {defNatLabel}</div>
                       <div style={{ color: '#68d391', fontWeight: 700 }}>→ {def} Defense</div>
                       {defStage !== 0 && <div style={{ color: defStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginTop: '2px' }}>Stage {defStage > 0 ? `+${defStage}` : defStage}: → {defEff} effective</div>}
@@ -879,7 +988,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                   tooltip={
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: '5px' }}>Sp. Defense Stat at Lv. 50</div>
-                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.spd} · EVs: {evs.spd} · IVs: 31</div>
+                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.spd} · {statMode === 'sp' ? `SPs: ${evs.spd}` : `EVs: ${evs.spd}`} · IVs: 31</div>
                       <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {spdNatLabel}</div>
                       <div style={{ color: '#68d391', fontWeight: 700 }}>→ {spd} Sp. Defense</div>
                       {spdStage !== 0 && <div style={{ color: spdStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginTop: '2px' }}>Stage {spdStage > 0 ? `+${spdStage}` : spdStage}: → {spdEff} effective</div>}
@@ -901,7 +1010,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                   tooltip={
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: '5px' }}>Speed Stat at Lv. 50</div>
-                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.spe} · EVs: {evs.spe} · IVs: 31</div>
+                      <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {selected.stats.spe} · {statMode === 'sp' ? `SPs: ${evs.spe}` : `EVs: ${evs.spe}`} · IVs: 31</div>
                       <div style={{ color: '#ccc', marginBottom: '4px', fontSize: '11px' }}>Nature: {speNatLabel}</div>
                       <div style={{ color: '#68d391', fontWeight: 700 }}>→ {baseSpe} Speed</div>
                       {speStage !== 0 && <div style={{ color: speStage < 0 ? '#fc8181' : '#68d391', fontWeight: 700, marginTop: '2px' }}>Stage {speStage > 0 ? `+${speStage}` : speStage}: → {speAfterStage} Speed</div>}
@@ -915,20 +1024,28 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
           </div>
 
           {(() => {
-            const totalEvs = evs.hp + evs.atk + evs.def + evs.spd + evs.spe;
-            const evError = totalEvs > 506;
+            const isSP = statMode === 'sp';
+            const totalInvested = evs.hp + evs.atk + evs.def + (isSP ? (evs.spa ?? 0) : 0) + evs.spd + evs.spe;
+            const investLimit = isSP ? 66 : 506;
+            const investError = totalInvested > investLimit;
+            const unit = isSP ? 'SPs' : 'EVs';
+            const maxVal = isSP ? 32 : 252;
+            const stepVal = isSP ? 1 : 4;
             return (
               <>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <EVInput label="HP EVs"  value={evs.hp}  onChange={v => onEvsChange({ ...evs, hp: v })}  error={evError} />
-                  <EVInput label="Atk EVs" value={evs.atk} onChange={v => onEvsChange({ ...evs, atk: v })} error={evError} />
-                  <EVInput label="Def EVs" value={evs.def} onChange={v => onEvsChange({ ...evs, def: v })} error={evError} />
-                  <EVInput label="SpD EVs" value={evs.spd} onChange={v => onEvsChange({ ...evs, spd: v })} error={evError} />
-                  <EVInput label="Spe EVs" value={evs.spe} onChange={v => onEvsChange({ ...evs, spe: v })} error={evError} />
+                  <EVInput label={`HP ${unit}`}  value={evs.hp}  onChange={v => onEvsChange({ ...evs, hp: v })}  error={investError} max={maxVal} step={stepVal} />
+                  <EVInput label={`Atk ${unit}`} value={evs.atk} onChange={v => onEvsChange({ ...evs, atk: v })} error={investError} max={maxVal} step={stepVal} />
+                  <EVInput label={`Def ${unit}`} value={evs.def} onChange={v => onEvsChange({ ...evs, def: v })} error={investError} max={maxVal} step={stepVal} />
+                  {isSP && (
+                    <EVInput label="SpA SPs" value={evs.spa ?? 0} onChange={v => onEvsChange({ ...evs, spa: v })} error={investError} max={32} step={1} />
+                  )}
+                  <EVInput label={`SpD ${unit}`} value={evs.spd} onChange={v => onEvsChange({ ...evs, spd: v })} error={investError} max={maxVal} step={stepVal} />
+                  <EVInput label={`Spe ${unit}`} value={evs.spe} onChange={v => onEvsChange({ ...evs, spe: v })} error={investError} max={maxVal} step={stepVal} />
                 </div>
-                {evError && (
+                {investError && (
                   <div style={{ fontSize: '11px', color: '#e53e3e', marginTop: '4px', fontWeight: 600 }}>
-                    Total EVs ({totalEvs}) exceeds the 506 limit
+                    Total {unit} ({totalInvested}) exceeds the {investLimit} limit
                   </div>
                 )}
               </>
@@ -1242,18 +1359,18 @@ function AdditionalSettings({
   );
 }
 
-function EVInput({ label, value, onChange, error }: { label: string; value: number; onChange: (v: number) => void; error?: boolean }) {
+function EVInput({ label, value, onChange, error, max = 252, step = 4 }: { label: string; value: number; onChange: (v: number) => void; error?: boolean; max?: number; step?: number }) {
   return (
     <div style={{ flex: '1 1 56px', minWidth: '52px', maxWidth: '72px' }}>
       <div style={{ fontSize: '10px', color: error ? '#e53e3e' : '#999', marginBottom: '2px' }}>{label}</div>
       <input
-        type="number" min={0} max={252} step={4} value={value}
-        onChange={e => onChange(Math.min(252, Math.max(0, Number(e.target.value))))}
+        type="number" min={0} max={max} step={step} value={value}
+        onChange={e => onChange(Math.min(max, Math.max(0, Number(e.target.value))))}
         style={{ width: '100%', padding: '4px 6px', border: `1px solid ${error ? '#e53e3e' : '#ddd'}`, borderRadius: '5px', fontSize: '12px', background: error ? '#fff5f5' : '#fff' }}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
         <span onClick={() => onChange(0)} style={{ fontSize: '9px', color: '#aaa', cursor: 'pointer', textDecoration: 'underline' }}>min</span>
-        <span onClick={() => onChange(252)} style={{ fontSize: '9px', color: '#aaa', cursor: 'pointer', textDecoration: 'underline' }}>max</span>
+        <span onClick={() => onChange(max)} style={{ fontSize: '9px', color: '#aaa', cursor: 'pointer', textDecoration: 'underline' }}>max</span>
       </div>
     </div>
   );
