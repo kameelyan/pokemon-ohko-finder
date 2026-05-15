@@ -34,6 +34,7 @@ export const FOUL_PLAY_MOVE_ID = 492;
  * Body Press deals damage using the attacker's Defense stat instead of Attack.
  */
 export const BODY_PRESS_MOVE_ID = 776;
+export const ROUND_MOVE_ID = 496;
 
 /**
  * Psyshock, Psystrike, and Secret Sword are Special moves that deal damage
@@ -254,6 +255,8 @@ export interface OHKOMoveInfo {
   weatherRequired?: Exclude<Weather, 'none'>;
   /** For Foul Play only: the target's Attack stat that was used in the damage calculation. */
   foulPlayAtk?: number;
+  /** For Round only: true when the base-power OHKO fails but the doubled power (×2) achieves it. */
+  needsRoundBoost?: boolean;
   coveredTargetIndices: number[];
 }
 
@@ -376,6 +379,7 @@ interface OHKOAttempt {
   minDmg: number;
   maxDmg: number;
   adjAccuracy: number | null;
+  needsRoundBoost?: boolean;
 }
 
 function tryOHKO(
@@ -457,6 +461,8 @@ function tryOHKO(
   // Friend Guard (doubles only): adjacent ally reduces all incoming damage by ×0.75
   const friendGuardMult = ts.friendGuard ? 0.75 : 1.0;
   const effectivePower = move.power * (abilityMod?.powerMult ?? 1.0) * weatherMult * terrainMult * fairyAuraMult * spreadMult * friendGuardMult;
+  let activePower = effectivePower; // may be doubled for Round
+  let needsRoundBoost = false;
 
   // Foul Play uses the target's Attack stat — the attacker invests no EVs
   const isFoulPlay = move.id === FOUL_PLAY_MOVE_ID;
@@ -472,24 +478,39 @@ function tryOHKO(
     if (!lands) return null;
     evNeeded = 0;
   } else {
-    evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult);
+    evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult);
 
     // Only fall back to a type-boosting item if no choice item is active — can't hold two items.
     if (evNeeded === null && choiceItemMult === 1.0) {
       const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
       if (typeItem) {
-        evNeeded = minEVsToOHKO(effectivePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult);
+        evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult);
         if (evNeeded !== null) item = typeItem;
       }
+    }
+
+    // Round: if base power fails, retry at double power (another Pokémon used Round first).
+    if (evNeeded === null && move.id === ROUND_MOVE_ID) {
+      item = undefined;
+      activePower = effectivePower * 2;
+      evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult);
+      if (evNeeded === null && choiceItemMult === 1.0) {
+        const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
+        if (typeItem) {
+          evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult);
+          if (evNeeded !== null) item = typeItem;
+        }
+      }
+      if (evNeeded !== null) needsRoundBoost = true;
     }
 
     if (evNeeded === null) return null;
   }
 
   const atkStat = isFoulPlay ? ts.atk : Math.floor(calcStat(atkBase, evNeeded, 31, 50, 1.0) * atkTotalMult);
-  const { min, max } = damageSingle(effectivePower, atkStat, defStat, stabFactor, effFactor, item?.boost ?? 1.0);
+  const { min, max } = damageSingle(activePower, atkStat, defStat, stabFactor, effFactor, item?.boost ?? 1.0);
 
-  return { evNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy };
+  return { evNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy, needsRoundBoost };
 }
 
 export function findPokemonOHKOs(
@@ -626,6 +647,7 @@ export function findPokemonOHKOs(
           abilityMod: abilityRequired,
           weatherRequired,
           foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
+          needsRoundBoost: chosen.needsRoundBoost,
           coveredTargetIndices: [],
         });
       }

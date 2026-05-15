@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { PokemonOHKOResult, OHKOMoveInfo, Weather, Terrain } from '../calc/damage';
-import { WEATHER_INFO, TERRAIN_INFO, FOUL_PLAY_MOVE_ID, BODY_PRESS_MOVE_ID, PSYSHOCK_MOVE_IDS } from '../calc/damage';
+import { WEATHER_INFO, TERRAIN_INFO, FOUL_PLAY_MOVE_ID, BODY_PRESS_MOVE_ID, PSYSHOCK_MOVE_IDS, ROUND_MOVE_ID } from '../calc/damage';
 import type { MoveFlag } from '../data/types';
 import { calcStat, stageMult } from '../calc/damage';
 import type { GameData, Pokemon } from '../data/types';
@@ -1354,6 +1354,23 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
                         whiteSpace: 'nowrap',
                       }}>
                         ↩ Atk: {m.foulPlayAtk}
+                      </span>
+                    </Tooltip>
+                  )}
+                  {/* Round double-power chip */}
+                  {m.move.id === ROUND_MOVE_ID && m.needsRoundBoost && (
+                    <Tooltip
+                      content="Round's power doubles to 120 when another Pokémon on the same team has already used Round that turn. This OHKO requires the doubled power."
+                      side="bottom"
+                      maxWidth={240}
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#faf5ff', color: '#553c9a',
+                        border: '1px solid #d6bcfa',
+                        borderRadius: '3px', padding: '1px 5px',
+                      }}>
+                        ♪ Double Power
                       </span>
                     </Tooltip>
                   )}
