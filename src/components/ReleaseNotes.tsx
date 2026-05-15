@@ -5,6 +5,34 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.7.1',
+    date: 'May 2026',
+    title: 'Form Filters, Search Polish & Bug Fixes',
+    sections: [
+      {
+        heading: '🎭 Exclude Forms Filter',
+        items: [
+          'A new "Forms" dropdown in the Filters panel lets you exclude specific form categories from results: Mega Evolutions, Regional Variants, Gigantamax, and Other Alternate Forms.',
+          'The dropdown turns red when any forms are excluded, matching the styling of other active filters.',
+          'Move Flags dropdown received the same active-state treatment.',
+        ],
+      },
+      {
+        heading: '🔍 Search & Sort',
+        items: [
+          'The search field has moved to the far left of the controls bar, with sort immediately to its right, for a more natural left-to-right flow.',
+          'Search field width increased so the placeholder text is no longer clipped.',
+        ],
+      },
+      {
+        heading: '🐛 Bug Fix',
+        items: [
+          'Fixed Foul Play calculations ignoring the target\'s Attack nature. An Adamant Dragapult with 252 Atk EVs now correctly shows 189 Attack (was 172).',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.7.0',
     date: 'May 2026',
     title: 'Foul Play Support & Global Search',
@@ -331,9 +359,55 @@ const releases: {
   },
 ];
 
+const KNOWN_ISSUES: { heading: string; items: string[] }[] = [
+  {
+    heading: '🏆 Pokémon Champions Roster',
+    items: [
+      'The Pokémon Champions eligible Pokémon list is not 100% accurate — it is sourced from PokéAPI and may be missing recently added or updated entries.',
+    ],
+  },
+];
+
 export default function ReleaseNotes() {
   return (
     <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+      {/* Known Issues */}
+      <div style={{
+        background: '#fff',
+        borderRadius: '12px',
+        padding: '28px 32px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
+        marginBottom: '24px',
+        borderLeft: '4px solid #f6ad55',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+          <span style={{
+            background: '#f6ad55', color: '#fff',
+            fontWeight: 800, fontSize: '13px',
+            borderRadius: '6px', padding: '2px 10px',
+            letterSpacing: '0.03em',
+          }}>
+            Known Issues
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {KNOWN_ISSUES.map(section => (
+            <div key={section.heading}>
+              <h3 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 700, color: '#2d3748' }}>
+                {section.heading}
+              </h3>
+              <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                {section.items.map((item, i) => (
+                  <li key={i} style={{ fontSize: '14px', color: '#4a5568', lineHeight: 1.6 }}>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {releases.map((release, ri) => (
         <div
           key={release.version}

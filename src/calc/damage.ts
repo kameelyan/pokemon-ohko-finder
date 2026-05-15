@@ -25,7 +25,8 @@ export interface TargetConfig {
   heldItem?: TargetHeldItem;
   reflect?: boolean;
   lightScreen?: boolean;
-  defNature?: number;  // 0.9 | 1.0 | 1.1
+  atkNature?: number;  // 0.9 | 1.0 | 1.1
+  defNature?: number;
   spdNature?: number;
   speNature?: number;
   /** Partner Pokémon has Friend Guard — reduces all incoming damage by ×0.75 (doubles only). */
@@ -426,7 +427,7 @@ export function findPokemonOHKOs(
   const targetStats: TargetStats[] = targets.map(t => ({
     pokemon: t.pokemon,
     hp: calcHP(t.pokemon.stats.hp, t.evs.hp),
-    atk: calcStat(t.pokemon.stats.atk, t.evs.atk, 31, 50, 1.0),
+    atk: calcStat(t.pokemon.stats.atk, t.evs.atk, 31, 50, t.atkNature ?? 1.0),
     def: calcStat(t.pokemon.stats.def, t.evs.def, 31, 50, t.defNature ?? 1.0),
     spd: calcStat(t.pokemon.stats.spd, t.evs.spd, 31, 50, t.spdNature ?? 1.0),
     defMult: t.heldItem?.defMult ?? 1.0,

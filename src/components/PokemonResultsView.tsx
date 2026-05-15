@@ -149,6 +149,26 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 type OutspeedFilter = 'any' | 'all' | 'none';
 type CategoryFilter = 'all' | 'physical' | 'special';
 
+type FormCategory = 'mega' | 'regional' | 'gmax' | 'other';
+
+const FORM_CATEGORIES: { key: FormCategory; label: string; test: (id: string) => boolean }[] = [
+  { key: 'mega',     label: 'Mega Evolutions',      test: id => id.includes('-mega') || id.includes('-primal') },
+  { key: 'regional', label: 'Regional Variants',    test: id => id.includes('-alola') || id.includes('-galar') || id.includes('-hisui') || id.includes('-paldea') },
+  { key: 'gmax',     label: 'Gigantamax',           test: id => id.includes('-gmax') },
+  { key: 'other',    label: 'Other Alternate Forms', test: (id) => {
+    const known = ['-mega', '-primal', '-alola', '-galar', '-hisui', '-paldea', '-gmax'];
+    return !known.some(s => id.includes(s));
+  }},
+];
+
+function getFormCategory(identifier: string, isDefault: boolean): FormCategory | null {
+  if (isDefault) return null;
+  for (const fc of FORM_CATEGORIES.slice(0, 3)) {
+    if (fc.test(identifier)) return fc.key;
+  }
+  return 'other';
+}
+
 interface Filters {
   types: Set<number>;
   minSpe: string;
@@ -159,6 +179,7 @@ interface Filters {
   noEvs: boolean;
   noItem: boolean;
   defaultOnly: boolean;
+  excludedForms: Set<FormCategory>;
   excludedFlags: Set<MoveFlag>;
 }
 
@@ -172,6 +193,7 @@ const EMPTY_FILTERS: Filters = {
   noEvs: false,
   noItem: false,
   defaultOnly: false,
+  excludedForms: new Set(),
   excludedFlags: new Set(),
 };
 
@@ -186,6 +208,7 @@ function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boole
     (f.noEvs ? 1 : 0) +
     (f.noItem ? 1 : 0) +
     (f.defaultOnly ? 1 : 0) +
+    (f.excludedForms.size > 0 ? 1 : 0) +
     (f.excludedFlags.size > 0 ? 1 : 0) +
     (showPossible ? 1 : 0) +
     (minAccuracy > 0 ? 1 : 0)
@@ -272,6 +295,10 @@ export default function PokemonResultsView({ title, results, targetNames, target
       const isMega = r.pokemon.identifier.includes('-mega');
       if ((filters.noItem || isMega) && !r.movesPerTarget.every(moves => moves.some(m => !m.item))) return false;
       if (filters.defaultOnly && !r.pokemon.isDefault) return false;
+      if (filters.excludedForms.size > 0 && !r.pokemon.isDefault) {
+        const fc = getFormCategory(r.pokemon.identifier, r.pokemon.isDefault);
+        if (fc && filters.excludedForms.has(fc)) return false;
+      }
       if (filters.excludedFlags.size > 0) {
         // Keep only Pokémon that have at least one OHKO move per target with none of the excluded flags
         if (!r.movesPerTarget.every(moves =>
@@ -375,48 +402,48 @@ export default function PokemonResultsView({ title, results, targetNames, target
         )}
       </h2>
 
-      {/* ── Controls bar: sort far-left · filters + expand far-right ── */}
+      {/* ── Controls bar: search + sort far-left · filters + expand far-right ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-        {/* Sort controls — far left */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sort</span>
-          <select
-            value={sortKey}
-            onChange={e => setSortKey(e.target.value as SortKey)}
+        {/* Search + Sort — far left */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by Pokémon or move name…"
             style={{
-              fontSize: '12px', padding: '4px 6px', border: '1px solid #ddd',
-              borderRadius: '6px', background: '#fff', color: '#555', cursor: 'pointer',
+              width: '270px',
+              fontSize: '12px', padding: '5px 10px',
+              border: '1px solid #ddd', borderRadius: '6px',
+              background: '#fff', color: '#333', outline: 'none',
             }}
-          >
-            {SORT_OPTIONS.map(o => (
-              <option key={o.key} value={o.key}>{o.label}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-            title={sortDir === 'asc' ? 'Ascending — click to switch to descending' : 'Descending — click to switch to ascending'}
-            style={{
-              ...btnStyle, padding: '4px 8px', fontWeight: 700, fontSize: '13px',
-              color: '#555', minWidth: '32px', textAlign: 'center',
-            }}
-          >
-            {sortDir === 'asc' ? '↑' : '↓'}
-          </button>
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sort</span>
+            <select
+              value={sortKey}
+              onChange={e => setSortKey(e.target.value as SortKey)}
+              style={{
+                fontSize: '12px', padding: '4px 6px', border: '1px solid #ddd',
+                borderRadius: '6px', background: '#fff', color: '#555', cursor: 'pointer',
+              }}
+            >
+              {SORT_OPTIONS.map(o => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+              title={sortDir === 'asc' ? 'Ascending — click to switch to descending' : 'Descending — click to switch to ascending'}
+              style={{
+                ...btnStyle, padding: '4px 8px', fontWeight: 700, fontSize: '13px',
+                color: '#555', minWidth: '32px', textAlign: 'center',
+              }}
+            >
+              {sortDir === 'asc' ? '↑' : '↓'}
+            </button>
+          </div>
         </div>
-
-        {/* Search — centre */}
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search by Pokémon or move name…"
-          style={{
-            flex: '1 1 180px', maxWidth: '260px',
-            fontSize: '12px', padding: '5px 10px',
-            border: '1px solid #ddd', borderRadius: '6px',
-            background: '#fff', color: '#333', outline: 'none',
-          }}
-        />
 
         {/* Battle Effects + Filters + expand/collapse — far right */}
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -620,6 +647,16 @@ export default function PokemonResultsView({ title, results, targetNames, target
                 <MoveFlagsDropdown
                   excludedFlags={filters.excludedFlags}
                   onChange={next => setFilter('excludedFlags', next)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <div style={filterLabel}>Exclude Forms</div>
+              <div style={{ marginTop: '6px' }}>
+                <ExcludeFormsDropdown
+                  excludedForms={filters.excludedForms}
+                  onChange={next => setFilter('excludedForms', next)}
                 />
               </div>
             </div>
@@ -1277,7 +1314,6 @@ function MoveFlagsDropdown({
   }, [open]);
 
   const excludedCount = excludedFlags.size;
-  const total = ALL_MOVE_FLAGS.length;
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
@@ -1291,7 +1327,7 @@ function MoveFlagsDropdown({
           color: excludedCount > 0 ? '#c53030' : '#555',
         }}
       >
-        {excludedCount === 0 ? `All flags` : `${total - excludedCount}/${total} flags`}
+        Move Flags
         <span style={{ fontSize: '10px' }}>{open ? '▲' : '▼'}</span>
       </button>
       {open && (
@@ -1346,6 +1382,83 @@ function MoveFlagsDropdown({
               style={{ ...clearChipStyle, marginTop: '8px', width: '100%', textAlign: 'center' }}
             >
               ✕ Show all flags
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Exclude Forms dropdown ──────────────────────────────────────────────────
+
+function ExcludeFormsDropdown({
+  excludedForms,
+  onChange,
+}: {
+  excludedForms: Set<FormCategory>;
+  onChange: (forms: Set<FormCategory>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const excludedCount = excludedForms.size;
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          ...toggleBtnStyle,
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          background: excludedCount > 0 ? '#fff5f5' : '#fff',
+          borderColor: excludedCount > 0 ? '#e53e3e' : '#ddd',
+          color: excludedCount > 0 ? '#c53030' : '#555',
+        }}
+      >
+        Forms
+        <span style={{ fontSize: '10px' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200,
+          background: '#fff', border: '1px solid #e2e8f0',
+          borderRadius: '8px', padding: '10px 12px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          minWidth: '220px',
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {FORM_CATEGORIES.map(({ key, label }) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#333' }}>
+                <input
+                  type="checkbox"
+                  checked={excludedForms.has(key)}
+                  style={{ margin: 0, cursor: 'pointer' }}
+                  onChange={e => {
+                    const next = new Set(excludedForms);
+                    e.target.checked ? next.add(key) : next.delete(key);
+                    onChange(next);
+                  }}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          {excludedCount > 0 && (
+            <button
+              onClick={() => onChange(new Set())}
+              style={{ ...clearChipStyle, marginTop: '8px', width: '100%', textAlign: 'center' }}
+            >
+              ✕ Show all forms
             </button>
           )}
         </div>

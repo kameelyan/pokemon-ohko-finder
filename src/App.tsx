@@ -221,6 +221,7 @@ export default function App() {
       heldItem: s.heldItem ?? undefined,
       reflect: s.reflect,
       lightScreen: s.lightScreen,
+      atkNature: getNatureMult(s.nature, 'atk'),
       defNature: getNatureMult(s.nature, 'def'),
       spdNature: getNatureMult(s.nature, 'spd'),
       speNature: getNatureMult(s.nature, 'spe'),
