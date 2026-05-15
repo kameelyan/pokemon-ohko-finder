@@ -489,10 +489,6 @@ export default function PokemonResultsView({ title, results, targetNames, target
             onFairyAuraChange={onFairyAuraChange}
             gravity={gravity}
             onGravityChange={onGravityChange}
-            atkStage={atkStage}
-            onAtkStageChange={onAtkStageChange}
-            spaStage={spaStage}
-            onSpaStageChange={onSpaStageChange}
           />
           <button
             onClick={() => setFiltersOpen(v => !v)}
@@ -1778,7 +1774,7 @@ function StatChangesDropdown({
               {CHOICE_ITEMS.map(({ key, label, desc, tooltip, identifier, color }) => {
                 const checked = choiceItem === key;
                 return (
-                  <Tooltip key={key} content={tooltip} side="left" maxWidth={220}>
+                  <Tooltip key={key} content={tooltip} side="bottom" maxWidth={220}>
                     <label
                       style={{
                         display: 'flex', alignItems: 'center', gap: '8px',
@@ -2073,7 +2069,7 @@ function AttackerStageStepper({ label, value, onChange, labelTooltip }: { label:
   return (
     <>
       {labelTooltip
-        ? <Tooltip content={labelTooltip} side="left" maxWidth={200}>{labelEl}</Tooltip>
+        ? <Tooltip content={labelTooltip} side="bottom" maxWidth={200}>{labelEl}</Tooltip>
         : labelEl}
       <button
         onClick={() => onChange(Math.max(-6, value - 1))}

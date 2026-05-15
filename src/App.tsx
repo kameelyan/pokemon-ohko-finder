@@ -830,7 +830,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                   base={selected.stats.atk}
                   computed={atk}
                   effective={atkStage !== 0 ? atkEff : undefined}
-                  stage={atkStage !== 0 ? atkStage : undefined}
+
                   tooltip={
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: '5px' }}>Attack Stat at Lv. 50</div>
@@ -853,7 +853,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                   base={selected.stats.def}
                   computed={def}
                   effective={defStage !== 0 ? defEff : undefined}
-                  stage={defStage !== 0 ? defStage : undefined}
+
                   tooltip={
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: '5px' }}>Defense Stat at Lv. 50</div>
@@ -875,7 +875,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                   base={selected.stats.spd}
                   computed={spd}
                   effective={spdStage !== 0 ? spdEff : undefined}
-                  stage={spdStage !== 0 ? spdStage : undefined}
+
                   tooltip={
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: '5px' }}>Sp. Defense Stat at Lv. 50</div>
@@ -897,7 +897,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                   base={selected.stats.spe}
                   computed={baseSpe}
                   effective={speStage !== 0 || (heldItem?.speedMult ?? 1) > 1 || tailwind ? spe : undefined}
-                  stage={speStage !== 0 ? speStage : undefined}
+
                   tooltip={
                     <div>
                       <div style={{ fontWeight: 700, marginBottom: '5px' }}>Speed Stat at Lv. 50</div>
@@ -1259,12 +1259,11 @@ function EVInput({ label, value, onChange, error }: { label: string; value: numb
   );
 }
 
-function StatPill({ label, base, computed, effective, stage, tooltip }: {
+function StatPill({ label, base, computed, effective, tooltip }: {
   label: string;
   base: number;
   computed?: number;
   effective?: number;
-  stage?: number;
   tooltip?: React.ReactNode;
 }) {
   const displayed = effective !== undefined ? effective : computed;
@@ -1296,7 +1295,7 @@ function StatStageStepper({ label, value, onChange, labelTooltip }: { label: str
   return (
     <>
       {labelTooltip
-        ? <Tooltip content={labelTooltip} side="right" maxWidth={200}>{labelEl}</Tooltip>
+        ? <Tooltip content={labelTooltip} side="bottom" maxWidth={200}>{labelEl}</Tooltip>
         : labelEl}
       <button
         onClick={() => onChange(Math.max(-6, value - 1))}
