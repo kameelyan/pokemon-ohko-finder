@@ -1041,7 +1041,8 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
   isDoubles: boolean;
 }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '520px' }}>
       <thead>
         <tr style={{ borderBottom: '1px solid #eee' }}>
           <th style={th}>Move</th>
@@ -1272,6 +1273,7 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles }: {
         })}
       </tbody>
     </table>
+    </div>
   );
 }
 
