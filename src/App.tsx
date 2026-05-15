@@ -529,34 +529,53 @@ export default function App() {
                   </Tooltip>
 
                   {/* Champions toggle */}
-                  <button
-                    onClick={() => setChampionsOnly(v => !v)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '7px',
-                      padding: '6px 14px',
-                      border: `1.5px solid ${championsOnly ? '#553c9a' : '#ddd'}`,
-                      borderRadius: '8px',
-                      background: championsOnly ? '#f3f0ff' : '#fff',
-                      color: championsOnly ? '#553c9a' : '#888',
-                      fontSize: '13px', fontWeight: 700, cursor: 'pointer',
-                      transition: 'all 0.15s',
-                    }}
+                  <Tooltip
+                    content={
+                      <div>
+                        <div style={{ fontWeight: 700, marginBottom: '5px' }}>Pokémon Champions Mode</div>
+                        <div style={{ color: '#ccc', marginBottom: '6px' }}>
+                          Restricts attacker results to Pokémon available in the Pokémon Champions roster.
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          <span style={{ color: '#9f7aea', fontWeight: 700 }}>On</span> — only Pokémon in the Champions roster appear as potential OHKOers. The search box for targets also filters to roster Pokémon only.
+                        </div>
+                        <div>
+                          <span style={{ color: '#68d391', fontWeight: 700 }}>Off</span> — all Pokémon from the full Pokédex are considered.
+                        </div>
+                      </div>
+                    }
+                    maxWidth={280}
+                    side="bottom"
                   >
-                    <span>🏆</span>
-                    <span>Pokémon Champions</span>
-                    <span style={{
-                      width: '28px', height: '16px', borderRadius: '999px',
-                      background: championsOnly ? '#553c9a' : '#ddd',
-                      position: 'relative', flexShrink: 0, transition: 'background 0.15s',
-                    }}>
+                    <button
+                      onClick={() => setChampionsOnly(v => !v)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '7px',
+                        padding: '6px 14px',
+                        border: `1.5px solid ${championsOnly ? '#553c9a' : '#ddd'}`,
+                        borderRadius: '8px',
+                        background: championsOnly ? '#f3f0ff' : '#fff',
+                        color: championsOnly ? '#553c9a' : '#888',
+                        fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <span>🏆</span>
+                      <span>Pokémon Champions</span>
                       <span style={{
-                        position: 'absolute', top: '2px',
-                        left: championsOnly ? '14px' : '2px',
-                        width: '12px', height: '12px', borderRadius: '50%',
-                        background: '#fff', transition: 'left 0.15s',
-                      }} />
-                    </span>
-                  </button>
+                        width: '28px', height: '16px', borderRadius: '999px',
+                        background: championsOnly ? '#553c9a' : '#ddd',
+                        position: 'relative', flexShrink: 0, transition: 'background 0.15s',
+                      }}>
+                        <span style={{
+                          position: 'absolute', top: '2px',
+                          left: championsOnly ? '14px' : '2px',
+                          width: '12px', height: '12px', borderRadius: '50%',
+                          background: '#fff', transition: 'left 0.15s',
+                        }} />
+                      </span>
+                    </button>
+                  </Tooltip>
 
                   {/* Stat mode toggle: EVs ↔ SPs */}
                   <Tooltip
