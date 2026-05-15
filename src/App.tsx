@@ -296,7 +296,9 @@ export default function App() {
     setTimeout(() => {
       const atkItemMult = choiceItem === 'band'  ? 1.5 : 1.0;
       const spaItemMult = choiceItem === 'specs' ? 1.5 : 1.0;
-      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult));
+      const evStep       = statMode === 'sp' ? 8 : 4;
+      const maxAttackerEV = statMode === 'sp' ? 256 : 252;
+      setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, evStep, maxAttackerEV));
       setComputing(false);
     }, 10);
   // eslint-disable-next-line react-hooks/exhaustive-deps

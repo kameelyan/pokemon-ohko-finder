@@ -405,6 +405,8 @@ function tryOHKO(
   atkDefStage: number,
   atkItemMult = 1.0,
   spaItemMult = 1.0,
+  evStep = 4,
+  maxAttackerEV = 252,
 ): OHKOAttempt | null {
   const effectiveTypeId = abilityMod?.typeOverride ?? move.typeId;
 
@@ -482,13 +484,13 @@ function tryOHKO(
     if (!lands) return null;
     evNeeded = 0;
   } else {
-    evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult);
+    evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult, evStep, maxAttackerEV);
 
     // Only fall back to a type-boosting item if no choice item is active — can't hold two items.
     if (evNeeded === null && choiceItemMult === 1.0) {
       const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
       if (typeItem) {
-        evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult);
+        evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult, evStep, maxAttackerEV);
         if (evNeeded !== null) item = typeItem;
       }
     }
@@ -497,11 +499,11 @@ function tryOHKO(
     if (evNeeded === null && move.id === ROUND_MOVE_ID) {
       item = undefined;
       activePower = effectivePower * 2;
-      evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult);
+      evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult, evStep, maxAttackerEV);
       if (evNeeded === null && choiceItemMult === 1.0) {
         const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
         if (typeItem) {
-          evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult);
+          evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult, evStep, maxAttackerEV);
           if (evNeeded !== null) item = typeItem;
         }
       }
@@ -532,6 +534,10 @@ export function findPokemonOHKOs(
   atkDefStage = 0,
   atkItemMult = 1.0,
   spaItemMult = 1.0,
+  /** EV increment used when searching for the minimum attacker EVs needed. Use 8 for SP mode (1 SP = 8 EVs). */
+  evStep = 4,
+  /** Maximum attacker EV to consider. Use 256 for SP mode (32 SPs × 8). */
+  maxAttackerEV = 252,
 ): PokemonOHKOResult[] {
   if (targets.length === 0) return [];
 
@@ -589,7 +595,7 @@ export function findPokemonOHKOs(
       const findBest = (configs: AbilityConfig[], w: Weather, ts: TargetStats) => {
         let best: { attempt: OHKOAttempt; ability: typeof attacker.abilities[0] | null } | null = null;
         for (const { mod, ability } of configs) {
-          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult);
+          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, evStep, maxAttackerEV);
           if (attempt && (!best || attempt.evNeeded < best.attempt.evNeeded)) {
             best = { attempt, ability };
           }
