@@ -1411,9 +1411,9 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                       ? (statMode === 'sp' ? extraRaw / 8 : extraRaw)
                       : null;
                     const extraStr = extra !== null && extra > 0
-                      ? ` — ${extra} extra ${unit}${extra === 1 ? '' : 's'} vs no ability`
+                      ? ` — ${extra} extra ${unit}${extra === 1 ? '' : 's'} because of ability`
                       : extra !== null && extra < 0
-                      ? ` — ${Math.abs(extra)} fewer ${unit}${Math.abs(extra) === 1 ? '' : 's'} vs no ability`
+                      ? ` — ${Math.abs(extra)} fewer ${unit}${Math.abs(extra) === 1 ? '' : 's'} because of ability`
                       : '';
                     const tooltipText = `Target's ${m.defAbility.name} ${isReduction ? 'reduces' : 'amplifies'} ${typeName}-type damage (×${m.defAbility.mult})${extraStr}`;
                     return (
