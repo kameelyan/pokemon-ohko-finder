@@ -39,6 +39,14 @@ export interface Move {
   effectId: number;             // PokeAPI effect_id — used to identify self-debuff effects
   effectChance: number | null; // chance of secondary effect (> 0 = Sheer Force applicable)
   isSpread: boolean;     // hits multiple targets (×0.75 in doubles): target_id 9 or 11
+  /**
+   * For moves that hit multiple times: the minimum and maximum number of hits per use.
+   * null for standard single-hit moves.
+   *
+   * Note: Triple Axel and Triple Kick have increasing power per hit — here we model
+   * them at base power as an approximation. Parental Bond is handled separately.
+   */
+  multiHit: { min: number; max: number } | null;
 }
 
 export interface PokemonMoveEntry {
