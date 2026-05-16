@@ -849,19 +849,38 @@ export function findPokemonOHKOs(
 
       type AbilityConfig = { mod: AbilityMod | null; ability: typeof attacker.abilities[0] | null };
 
-      // Build ability configs for a given weather (determines which weather-dependent abilities apply)
-      const buildConfigs = (w: Weather): AbilityConfig[] => {
-        const configs: AbilityConfig[] = [{ mod: null, ability: null }];
+      /**
+       * Abilities that are situationally available and should not suppress a
+       * no-ability OHKO result when one exists.
+       *
+       * Protean / Libero: in Gen 9 these only activate once per battle, and we
+       * cannot assume the type-change is available for a given attack. If the
+       * move can already OHKO without STAB (just at higher EVs), we prefer to
+       * show that result so the player knows the OHKO is always achievable.
+       * Protean/Libero only appear in results when the OHKO is impossible
+       * without their STAB bonus.
+       */
+      const FALLBACK_ABILITIES = new Set(['protean', 'libero']);
+
+      // Build ability configs for a given weather (determines which weather-dependent abilities apply).
+      // Returns { primary, fallback } — primary configs are tried first; fallback configs only when
+      // primary configs produce no result.
+      const buildConfigs = (w: Weather): { primary: AbilityConfig[]; fallback: AbilityConfig[] } => {
+        const primary:  AbilityConfig[] = [{ mod: null, ability: null }];
+        const fallback: AbilityConfig[] = [];
         for (const ability of attacker.abilities) {
           const m = getAbilityMod(ability.identifier, move, attacker.typeIds, isPhysical, w);
-          if (m) configs.push({ mod: m, ability });
+          if (!m) continue;
+          if (FALLBACK_ABILITIES.has(ability.identifier)) {
+            fallback.push({ mod: m, ability });
+          } else {
+            primary.push({ mod: m, ability });
+          }
         }
-        return configs;
+        return { primary, fallback };
       };
 
-      // Find best attempt across a set of configs under a given weather.
-      // atkNM / spaNM are the attacker nature multipliers (1.0 = neutral).
-      const findBest = (configs: AbilityConfig[], w: Weather, ts: TargetStats, atkNM = 1.0, spaNM = 1.0) => {
+      const tryConfigs = (configs: AbilityConfig[], w: Weather, ts: TargetStats, atkNM = 1.0, spaNM = 1.0) => {
         let best: { attempt: OHKOAttempt; ability: typeof attacker.abilities[0] | null } | null = null;
         for (const { mod, ability } of configs) {
           const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, atkNM, spaNM, evStep, maxAttackerEV, hasMoldBreaker, hasParentalBond);
@@ -872,8 +891,13 @@ export function findPokemonOHKOs(
         return best;
       };
 
-      const noWeatherConfigs = buildConfigs('none');
-      const withWeatherConfigs = weather !== 'none' ? buildConfigs(weather) : [];
+      // Find best attempt: primary configs first; fall back to situational abilities
+      // (Protean/Libero) only when primary configs cannot achieve the OHKO.
+      const findBest = (configs: { primary: AbilityConfig[]; fallback: AbilityConfig[] }, w: Weather, ts: TargetStats, atkNM = 1.0, spaNM = 1.0) =>
+        tryConfigs(configs.primary, w, ts, atkNM, spaNM) ?? tryConfigs(configs.fallback, w, ts, atkNM, spaNM);
+
+      const noWeatherConfigs   = buildConfigs('none');
+      const withWeatherConfigs = weather !== 'none' ? buildConfigs(weather) : { primary: [], fallback: [] };
 
       for (let ti = 0; ti < targetStats.length; ti++) {
         const ts = targetStats[ti];

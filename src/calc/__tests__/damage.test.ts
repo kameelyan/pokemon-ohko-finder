@@ -788,4 +788,28 @@ describe('findPokemonOHKOs — Protean / Libero always grant STAB', () => {
         .toBe(resProtean[0].movesPerTarget[0][0].evNeeded);
     }
   });
+
+  it('Protean is only shown when required — no-ability result wins when the OHKO is already achievable', () => {
+    // Attacker strong enough (base Atk 200) to OHKO without STAB.
+    // Protean is in the ability list, but since no-ability can already OHKO it should NOT
+    // appear as the abilityMod — the no-ability path is shown instead.
+    const strongNoAbility = makePokemon(ATTACKER_ID, 200, 80, 100, [NORMAL_TYPE]);
+    const strongProtean   = makePokemon(ATTACKER_ID, 200, 80, 100, [NORMAL_TYPE], [
+      makeAbility('protean', 'Protean'),
+    ]);
+
+    const resNoAbility = findPokemonOHKOs([softTarget], makeData(strongNoAbility, NORMAL_TYPE, [waterMove]));
+    const resProtean   = findPokemonOHKOs([softTarget], makeData(strongProtean,   NORMAL_TYPE, [waterMove]));
+
+    // Both should find a result — the move OHKOs without STAB at high Atk
+    expect(resNoAbility.length).toBeGreaterThan(0);
+    expect(resProtean.length).toBeGreaterThan(0);
+
+    // Even though the attacker has Protean, it should NOT be marked as required
+    expect(resProtean[0].movesPerTarget[0][0].abilityMod).toBeUndefined();
+
+    // The evNeeded should be the same (no-ability result, not the Protean shortcut)
+    expect(resProtean[0].movesPerTarget[0][0].evNeeded)
+      .toBe(resNoAbility[0].movesPerTarget[0][0].evNeeded);
+  });
 });
