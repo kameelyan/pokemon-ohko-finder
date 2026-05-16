@@ -987,6 +987,8 @@ function heldItemDescription(item: TargetHeldItem, data: GameData): string {
     const typeName = data.typeNames.get(r.typeId) ?? 'unknown';
     parts.push(`Halves damage from ${typeName}-type moves`);
   }
+  if (item.focusSash)
+    parts.push('Survives any single hit from full HP at 1 HP — bypassed only by multi-hit moves or Parental Bond (not Mold Breaker)');
   return parts.join(' · ');
 }
 
@@ -1007,6 +1009,10 @@ const HELD_ITEM_GROUPS: { label: string; items: typeof TARGET_HELD_ITEMS }[] = [
   {
     label: 'Type-Resist Berries',
     items: TARGET_HELD_ITEMS.filter(i => i.typeResists.length > 0),
+  },
+  {
+    label: 'Survival',
+    items: TARGET_HELD_ITEMS.filter(i => i.focusSash),
   },
 ];
 

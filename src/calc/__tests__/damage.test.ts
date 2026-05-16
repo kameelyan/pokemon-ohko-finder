@@ -11,6 +11,7 @@ import {
   BODY_PRESS_MOVE_ID,
   PSYSHOCK_MOVE_IDS,
   findPokemonOHKOs,
+  TARGET_HELD_ITEMS,
   type TargetConfig,
 } from '../damage';
 import type { GameData, Move, MoveFlag, Pokemon, PokemonAbility } from '../../data/types';
@@ -811,5 +812,131 @@ describe('findPokemonOHKOs — Protean / Libero always grant STAB', () => {
     // The evNeeded should be the same (no-ability result, not the Protean shortcut)
     expect(resProtean[0].movesPerTarget[0][0].evNeeded)
       .toBe(resNoAbility[0].movesPerTarget[0][0].evNeeded);
+  });
+});
+
+// ─── Focus Sash — single-hit blocked ─────────────────────────────────────────
+
+const focusSash = TARGET_HELD_ITEMS.find(i => i.identifier === 'focus-sash')!;
+
+describe('findPokemonOHKOs — Focus Sash blocks single-hit moves', () => {
+  const singleHitMove = makeMove(701, 100, NORMAL_TYPE);
+  const sashTarget: TargetConfig = { ...makeTarget(target), heldItem: focusSash };
+
+  it('single-hit move is removed from results when target holds Focus Sash', () => {
+    const data    = makeData(attacker, NORMAL_TYPE, [singleHitMove]);
+    const results = findPokemonOHKOs([sashTarget], data);
+    expect(results.length).toBe(0);
+  });
+
+  it('Focus Sash does not affect results when target HP is not at risk (sanity)', () => {
+    // Without Focus Sash the same attacker+move finds a result
+    const normalTarget = makeTarget(target);
+    const data         = makeData(attacker, NORMAL_TYPE, [singleHitMove]);
+    const results      = findPokemonOHKOs([normalTarget], data);
+    expect(results.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Focus Sash — bypassed by multi-hit ──────────────────────────────────────
+
+describe('findPokemonOHKOs — multi-hit breaks Focus Sash', () => {
+  const twoHitMove  = makeMove(702, 50, NORMAL_TYPE, 2, { min: 2, max: 2 });
+  const sashTarget: TargetConfig = { ...makeTarget(target), heldItem: focusSash };
+
+  it('guaranteed 2-hit move appears in results against a Focus Sash target', () => {
+    const data    = makeData(attacker, NORMAL_TYPE, [twoHitMove]);
+    const results = findPokemonOHKOs([sashTarget], data);
+    expect(results.length).toBeGreaterThan(0);
+  });
+
+  it('Sash-breaking result has breaksSash = true', () => {
+    const data    = makeData(attacker, NORMAL_TYPE, [twoHitMove]);
+    const results = findPokemonOHKOs([sashTarget], data);
+    const info    = results[0].movesPerTarget[0][0];
+    expect(info.breaksSash).toBe(true);
+  });
+
+  it('Sash-breaking result has breaksSturdy undefined (not Sturdy)', () => {
+    const data    = makeData(attacker, NORMAL_TYPE, [twoHitMove]);
+    const results = findPokemonOHKOs([sashTarget], data);
+    const info    = results[0].movesPerTarget[0][0];
+    expect(info.breaksSturdy).toBeUndefined();
+  });
+
+  it('Sash-breaking result has hitsRequired = 2', () => {
+    const data    = makeData(attacker, NORMAL_TYPE, [twoHitMove]);
+    const results = findPokemonOHKOs([sashTarget], data);
+    const info    = results[0].movesPerTarget[0][0];
+    expect(info.hitsRequired).toBe(2);
+  });
+
+  it('Sash-breaking result has evNeeded = 0 (no EV investment required)', () => {
+    const data    = makeData(attacker, NORMAL_TYPE, [twoHitMove]);
+    const results = findPokemonOHKOs([sashTarget], data);
+    const info    = results[0].movesPerTarget[0][0];
+    expect(info.evNeeded).toBe(0);
+  });
+
+  it('move with min=1 hits does NOT break Focus Sash (not guaranteed to hit twice)', () => {
+    const popBomb  = makeMove(703, 20, NORMAL_TYPE, 2, { min: 1, max: 10 });
+    const data     = makeData(attacker, NORMAL_TYPE, [popBomb]);
+    const results  = findPokemonOHKOs([sashTarget], data);
+    // min=1 cannot guarantee the Sash pops on the first hit
+    expect(results.length).toBe(0);
+  });
+});
+
+// ─── Focus Sash — Mold Breaker does NOT bypass ───────────────────────────────
+
+describe('findPokemonOHKOs — Mold Breaker does NOT bypass Focus Sash', () => {
+  const singleHitMove = makeMove(704, 100, NORMAL_TYPE);
+  const sashTarget: TargetConfig = { ...makeTarget(target), heldItem: focusSash };
+
+  it('Mold Breaker attacker is still blocked by Focus Sash', () => {
+    const mbAttacker = makePokemon(ATTACKER_ID, 200, 100, 100, [NORMAL_TYPE], [
+      makeAbility('mold-breaker', 'Mold Breaker'),
+    ]);
+    const data    = makeData(mbAttacker, NORMAL_TYPE, [singleHitMove]);
+    const results = findPokemonOHKOs([sashTarget], data);
+    expect(results.length).toBe(0);
+  });
+
+  it('Turboblaze is also still blocked by Focus Sash', () => {
+    const tbAttacker = makePokemon(ATTACKER_ID, 200, 100, 100, [NORMAL_TYPE], [
+      makeAbility('turboblaze', 'Turboblaze'),
+    ]);
+    const data    = makeData(tbAttacker, NORMAL_TYPE, [singleHitMove]);
+    const results = findPokemonOHKOs([sashTarget], data);
+    expect(results.length).toBe(0);
+  });
+});
+
+// ─── Focus Sash — bypassed by Parental Bond ──────────────────────────────────
+
+describe('findPokemonOHKOs — Parental Bond bypasses Focus Sash', () => {
+  const singleHitMove = makeMove(705, 50, NORMAL_TYPE);
+  const sashTarget: TargetConfig = { ...makeTarget(target), heldItem: focusSash };
+
+  it('Mega Kangaskhan (ID 10039) bypasses Focus Sash with a single-hit move', () => {
+    const megaKang = makePokemon(10039, 125, 100, 105, [NORMAL_TYPE]);
+    const data     = makeData(megaKang, NORMAL_TYPE, [singleHitMove]);
+    const results  = findPokemonOHKOs([sashTarget], data);
+    expect(results.length).toBeGreaterThan(0);
+  });
+
+  it('Parental Bond result has breaksSash = true', () => {
+    const megaKang = makePokemon(10039, 125, 100, 105, [NORMAL_TYPE]);
+    const data     = makeData(megaKang, NORMAL_TYPE, [singleHitMove]);
+    const results  = findPokemonOHKOs([sashTarget], data);
+    const info     = results[0].movesPerTarget[0][0];
+    expect(info.breaksSash).toBe(true);
+  });
+
+  it('non-Mega-Kangaskhan Pokémon is still blocked by Focus Sash', () => {
+    const notKang = makePokemon(115, 95, 80, 105, [NORMAL_TYPE]);
+    const data    = makeData(notKang, NORMAL_TYPE, [singleHitMove]);
+    const results = findPokemonOHKOs([sashTarget], data);
+    expect(results.length).toBe(0);
   });
 });

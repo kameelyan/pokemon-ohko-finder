@@ -1446,8 +1446,26 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                       </span>
                     </Tooltip>
                   )}
-                  {/* Multi-hit: hits required chip (non-Sturdy) */}
-                  {m.hitsRequired !== undefined && !m.breaksSturdy && (
+                  {/* Focus Sash-break chip */}
+                  {m.breaksSash && (
+                    <Tooltip
+                      content={`${m.move.name} hits at least twice. The first hit pops the Focus Sash (target survives at 1 HP), and the second hit KOs — no EV investment needed. Mold Breaker has no effect on held items. Damage shown is 2 hits total.`}
+                      side="bottom"
+                      maxWidth={300}
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#fffaf0', color: '#744210',
+                        border: '1px solid #f6ad55',
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        🎽 Breaks Sash (2 hits)
+                      </span>
+                    </Tooltip>
+                  )}
+                  {/* Multi-hit: hits required chip (non-Sturdy, non-Sash) */}
+                  {m.hitsRequired !== undefined && !m.breaksSturdy && !m.breaksSash && (
                     <Tooltip
                       content={`${m.move.name} hits multiple times. With these EVs, ${m.hitsRequired} hit${m.hitsRequired === 1 ? '' : 's'} are needed to KO the target. Damage shown is the total across all required hits.`}
                       side="bottom"

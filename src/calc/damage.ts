@@ -95,6 +95,12 @@ export interface TargetHeldItem {
   speedMult: number; // multiplier on the target's Speed stat (for outspeed comparisons)
   accuracyMult: number;
   typeResists: { typeId: number; mult: number }[];
+  /**
+   * True for Focus Sash. Prevents an OHKO from full HP by a single hit, leaving the target
+   * at 1 HP. Unlike Sturdy, this is an item so Mold Breaker does NOT bypass it.
+   * Multi-hit moves (min ≥ 2 hits) and Parental Bond still break it.
+   */
+  focusSash?: boolean;
 }
 
 /** Defensive held items available on target Pokémon. */
@@ -122,6 +128,7 @@ export const TARGET_HELD_ITEMS: TargetHeldItem[] = [
   { name: 'Haban Berry',   identifier: 'haban-berry',   defMult: 1.0, spdMult: 1.0, speedMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 16, mult: 0.5 }] },
   { name: 'Colbur Berry',  identifier: 'colbur-berry',  defMult: 1.0, spdMult: 1.0, speedMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 17, mult: 0.5 }] },
   { name: 'Roseli Berry',  identifier: 'roseli-berry',  defMult: 1.0, spdMult: 1.0, speedMult: 1.0, accuracyMult: 1.0, typeResists: [{ typeId: 18, mult: 0.5 }] },
+  { name: 'Focus Sash',   identifier: 'focus-sash',   defMult: 1.0, spdMult: 1.0, speedMult: 1.0, accuracyMult: 1.0, typeResists: [], focusSash: true },
 ];
 
 export interface HeldItem {
@@ -335,6 +342,13 @@ export interface OHKOMoveInfo {
    * Implies hitsRequired = 2 and the damage numbers shown are for 2 hits total.
    */
   breaksSturdy?: boolean;
+  /**
+   * True when the KO is achieved because a multi-hit move (or Parental Bond) breaks
+   * the target's Focus Sash on the first hit, with subsequent hits finishing the target.
+   * Unlike Sturdy, Mold Breaker has no effect on Focus Sash.
+   * Implies hitsRequired = 2.
+   */
+  breaksSash?: boolean;
   coveredTargetIndices: number[];
 }
 
@@ -451,6 +465,7 @@ interface TargetStats {
   defStage: number;
   spdStage: number;
   selectedAbilityIdentifier?: string;
+  heldItem?: TargetHeldItem;
 }
 
 interface OHKOAttempt {
@@ -470,6 +485,8 @@ interface OHKOAttempt {
   hitsRequired?: number;
   /** True when the KO bypasses Sturdy via multi-hit first-hit + subsequent-hit mechanic. */
   breaksSturdy?: boolean;
+  /** True when the KO bypasses Focus Sash via multi-hit first-hit + subsequent-hit mechanic. */
+  breaksSash?: boolean;
 }
 
 /**
@@ -619,6 +636,16 @@ function tryOHKO(
   // case we fall through to the normal single-hit OHKO calc.
   const usesMultiHitSturdyBreak = targetHasSturdy && !hasMoldBreaker && (multiHitMin2 || hasParentalBond);
 
+  // ── Focus Sash check ──────────────────────────────────────────────────────
+  // Focus Sash prevents an OHKO from full HP by any single hit, leaving the target at 1 HP.
+  // Unlike Sturdy, it is an item — Mold Breaker DOES NOT bypass it.
+  // Multi-hit moves (min ≥ 2) and Parental Bond still break it: first hit pops the Sash,
+  // subsequent hits finish the target.
+  const targetHasFocusSash = ts.heldItem?.focusSash === true;
+  const sashBypass = multiHitMin2 || hasParentalBond; // no Mold Breaker
+  if (targetHasFocusSash && !sashBypass) return null;
+  const usesMultiHitSashBreak = targetHasFocusSash && (multiHitMin2 || hasParentalBond);
+
   const rawDef = (isPhysical || isPsyshock) ? ts.def : ts.spd;
   const targetStageMult = (isPhysical || isPsyshock) ? stageMult(ts.defStage) : stageMult(ts.spdStage);
   const statMult = (isPhysical || isPsyshock) ? ts.defMult : ts.spdMult;
@@ -694,6 +721,20 @@ function tryOHKO(
       evNeeded: 0, item: undefined, stab, effFactor,
       minDmg: s1 * 2, maxDmg: s2 * 2,
       adjAccuracy, needsGoingSecond, hitsRequired: 2, breaksSturdy: true,
+    };
+  }
+
+  // ── Focus Sash-break via multi-hit fast path ──────────────────────────────
+  // Identical logic to Sturdy-break: first hit pops the Sash (target at 1 HP),
+  // second hit finishes. No EV investment needed beyond dealing > 0 damage.
+  if (usesMultiHitSashBreak) {
+    const atkStat0 = Math.floor(calcStat(atkBase, 0, 31, 50, 1.0) * atkTotalMult);
+    const { min: s1, max: s2 } = damageSingle(activePower, atkStat0, defStat, stabFactor, effFactor, 1.0);
+    if (s2 <= 0) return null; // move does zero damage — can't pop the Sash
+    return {
+      evNeeded: 0, item: undefined, stab, effFactor,
+      minDmg: s1 * 2, maxDmg: s2 * 2,
+      adjAccuracy, needsGoingSecond, hitsRequired: 2, breaksSash: true,
     };
   }
 
@@ -820,6 +861,7 @@ export function findPokemonOHKOs(
     defStage: t.defStage ?? 0,
     spdStage: t.spdStage ?? 0,
     selectedAbilityIdentifier: t.selectedAbilityIdentifier,
+    heldItem: t.heldItem,
   }));
 
   const results: PokemonOHKOResult[] = [];
@@ -960,6 +1002,7 @@ export function findPokemonOHKOs(
             needsGoingSecond: chosen.needsGoingSecond,
             hitsRequired: chosen.hitsRequired,
             breaksSturdy: chosen.breaksSturdy,
+            breaksSash: chosen.breaksSash,
             coveredTargetIndices: [],
           });
         }
@@ -1017,6 +1060,7 @@ export function findPokemonOHKOs(
               needsGoingSecond: natureChosen.needsGoingSecond,
               hitsRequired: natureChosen.hitsRequired,
               breaksSturdy: natureChosen.breaksSturdy,
+              breaksSash: natureChosen.breaksSash,
               nature: natureLabel,
               coveredTargetIndices: [],
             });
