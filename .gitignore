@@ -15,6 +15,13 @@ dist-ssr
 # Raw source data (pre-processed into move_descriptions.json — not needed at runtime)
 public/data/move_flavor_text.csv
 
+# Claude Code session files
+.claude/
+
+# Playwright test artifacts
+test-results/
+playwright-report/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
