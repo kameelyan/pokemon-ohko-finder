@@ -1405,10 +1405,17 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                   {m.defAbility && m.evNeeded > 0 && (() => {
                     const isReduction = m.defAbility.mult < 1;
                     const typeName = data.typeNames.get(m.move.typeId) ?? 'this';
-                    const multStr = isReduction
-                      ? `×${m.defAbility.mult}`
-                      : `×${m.defAbility.mult}`;
-                    const tooltipText = `Target's ${m.defAbility.name} ${isReduction ? 'reduces' : 'amplifies'} ${typeName}-type damage (${multStr})`;
+                    const unit = statMode === 'sp' ? 'SP' : 'EV';
+                    const extraRaw = m.baseEvNeeded !== undefined ? m.evNeeded - m.baseEvNeeded : null;
+                    const extra = extraRaw !== null
+                      ? (statMode === 'sp' ? extraRaw / 8 : extraRaw)
+                      : null;
+                    const extraStr = extra !== null && extra > 0
+                      ? ` — ${extra} extra ${unit}${extra === 1 ? '' : 's'} vs no ability`
+                      : extra !== null && extra < 0
+                      ? ` — ${Math.abs(extra)} fewer ${unit}${Math.abs(extra) === 1 ? '' : 's'} vs no ability`
+                      : '';
+                    const tooltipText = `Target's ${m.defAbility.name} ${isReduction ? 'reduces' : 'amplifies'} ${typeName}-type damage (×${m.defAbility.mult})${extraStr}`;
                     return (
                       <Tooltip content={tooltipText} side="bottom">
                         <span style={{

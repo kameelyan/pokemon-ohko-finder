@@ -257,6 +257,8 @@ export interface OHKOMoveInfo {
   abilityMod?: { identifier: string; name: string; isHidden: boolean };
   /** Defensive ability of the target that modified the damage for this OHKO. */
   defAbility?: { identifier: string; name: string; mult: number };
+  /** EVs needed without the defensive ability — present only when defAbility is set. */
+  baseEvNeeded?: number;
   /** Weather condition that was required for this OHKO (absent = works without weather). */
   weatherRequired?: Exclude<Weather, 'none'>;
   /** For Foul Play only: the target's Attack stat that was used in the damage calculation. */
@@ -382,6 +384,8 @@ interface TargetStats {
 
 interface OHKOAttempt {
   evNeeded: number;
+  /** EVs needed without the defensive ability applied — set only when defAbility is present. */
+  baseEvNeeded?: number;
   item?: HeldItem;
   stab: boolean;
   effFactor: number;
@@ -585,10 +589,18 @@ function tryOHKO(
     if (evNeeded === null) return null;
   }
 
+  // If a defensive ability is reducing/amplifying damage, compute the baseline EVs (without
+  // the ability) so the tooltip can show how many extra EVs the ability is responsible for.
+  let baseEvNeeded: number | undefined;
+  if (defAbility && !isFoulPlay) {
+    const basePower = activePower / defAbilityMult;
+    baseEvNeeded = minEVsToOHKO(basePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, item?.boost ?? 1.0, atkTotalMult, evStep, maxAttackerEV) ?? undefined;
+  }
+
   const atkStat = isFoulPlay ? ts.atk : Math.floor(calcStat(atkBase, evNeeded, 31, 50, 1.0) * atkTotalMult);
   const { min, max } = damageSingle(activePower, atkStat, defStat, stabFactor, effFactor, item?.boost ?? 1.0);
 
-  return { evNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy, needsRoundBoost, defAbility };
+  return { evNeeded, baseEvNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy, needsRoundBoost, defAbility };
 }
 
 export function findPokemonOHKOs(
@@ -729,6 +741,7 @@ export function findPokemonOHKOs(
           item: chosen.item,
           abilityMod: abilityRequired,
           defAbility: chosen.defAbility,
+          baseEvNeeded: chosen.baseEvNeeded,
           weatherRequired,
           foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
           needsRoundBoost: chosen.needsRoundBoost,
