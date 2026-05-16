@@ -1118,22 +1118,38 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
                 {selected.abilities.map(ab => {
                   const isSelected = ability === ab.identifier;
                   return (
-                    <button
+                    <Tooltip
                       key={ab.identifier}
-                      onClick={() => onAbilityChange(ab.identifier)}
-                      style={{
-                        fontSize: '11px', padding: '2px 8px',
-                        borderRadius: '4px', cursor: 'pointer',
-                        border: isSelected ? '1px solid #553c9a' : '1px solid #ddd',
-                        background: isSelected ? '#553c9a' : '#fff',
-                        color: isSelected ? '#fff' : '#666',
-                        fontWeight: isSelected ? 700 : 400,
-                        transition: 'all 0.12s',
-                        whiteSpace: 'nowrap',
-                      }}
+                      content={
+                        <div>
+                          <div style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {ab.name}
+                            {ab.isHidden && <span style={{ fontSize: '10px', color: '#a78bfa', fontWeight: 600 }}>Hidden</span>}
+                          </div>
+                          {ab.description
+                            ? <div style={{ color: '#ccc' }}>{ab.description}</div>
+                            : <div style={{ color: '#777', fontStyle: 'italic' }}>No description available</div>
+                          }
+                        </div>
+                      }
+                      maxWidth={260}
                     >
-                      {ab.name}{ab.isHidden ? ' (H)' : ''}
-                    </button>
+                      <button
+                        onClick={() => onAbilityChange(ab.identifier)}
+                        style={{
+                          fontSize: '11px', padding: '2px 8px',
+                          borderRadius: '4px', cursor: 'pointer',
+                          border: isSelected ? '1px solid #553c9a' : '1px solid #ddd',
+                          background: isSelected ? '#553c9a' : '#fff',
+                          color: isSelected ? '#fff' : '#666',
+                          fontWeight: isSelected ? 700 : 400,
+                          transition: 'all 0.12s',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {ab.name}{ab.isHidden ? ' (H)' : ''}
+                      </button>
+                    </Tooltip>
                   );
                 })}
               </div>

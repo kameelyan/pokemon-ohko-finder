@@ -1120,17 +1120,18 @@ export default function PokemonResultsView({ title, results, targetNames, target
                         }
                         maxWidth={260}
                       >
-                        <span style={{
-                          background: ability.isHidden ? '#f3f0ff' : '#f0f0f0',
-                          border: `1px solid ${ability.isHidden ? '#c4b5fd' : '#e0e0e0'}`,
-                          color: ability.isHidden ? '#6d28d9' : '#444',
-                          borderRadius: '5px',
-                          padding: '1px 7px',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          cursor: 'help',
-                          whiteSpace: 'nowrap',
-                        }}>
+                        <span
+                          style={{
+                            background: ability.isHidden ? '#f3f0ff' : '#f0f0f0',
+                            border: `1px solid ${ability.isHidden ? '#c4b5fd' : '#e0e0e0'}`,
+                            color: ability.isHidden ? '#6d28d9' : '#444',
+                            borderRadius: '5px',
+                            padding: '1px 7px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            cursor: 'help',
+                            whiteSpace: 'nowrap',
+                          }}>
                           {ability.name}
                         </span>
                       </Tooltip>
