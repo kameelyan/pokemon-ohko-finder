@@ -448,8 +448,11 @@ export default function App() {
 
   useEffect(() => {
     if (!data || activeTargets.length === 0) { setResults([]); return; }
+    // Clear stale results immediately so the old calc's data never bleeds through
+    // with mismatched display settings (e.g. band-calc results shown without band filter).
+    setResults([]);
     setComputing(true);
-    setTimeout(() => {
+    const id = setTimeout(() => {
       const atkItemMult   = choiceItem === 'band'  ? 1.5 : 1.0;
       const spaItemMult   = choiceItem === 'specs' ? 1.5 : 1.0;
       const evStep        = statMode === 'sp' ? 8 : 4;
@@ -457,6 +460,8 @@ export default function App() {
       setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, evStep, maxAttackerEV));
       setComputing(false);
     }, 10);
+    // Cancel any in-flight computation if deps change before it completes
+    return () => clearTimeout(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, slots, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, choiceItem, statMode]);
 

@@ -332,7 +332,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
 
       return true;
     });
-  }, [results, filters, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly]);
+  }, [results, filters, choiceItem, trickRoom, atkSpeStage, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly, data]);
 
   const sortedResults = useMemo(() => {
     const arr = [...filteredResults];
