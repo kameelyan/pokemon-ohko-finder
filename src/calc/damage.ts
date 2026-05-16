@@ -515,7 +515,11 @@ function tryOHKO(
   if (ts.selectedAbilityIdentifier) {
     const da = ts.pokemon.abilities.find(a => a.identifier === ts.selectedAbilityIdentifier);
     if (da) {
-      const effect = applyTargetAbility(da.identifier, effectiveTypeId, effFactor, isPhysical, isContact, isSound);
+      // Gravity grounds all Pokémon — Levitate's Ground immunity is suppressed.
+      const gravityNegated = gravity && da.identifier === 'levitate';
+      const effect = gravityNegated
+        ? { immune: false, mult: 1.0 }
+        : applyTargetAbility(da.identifier, effectiveTypeId, effFactor, isPhysical, isContact, isSound);
       if (effect.immune) return null;
       if (effect.mult !== 1.0) {
         defAbilityMult = effect.mult;
