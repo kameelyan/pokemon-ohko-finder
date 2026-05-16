@@ -845,6 +845,11 @@ export function findPokemonOHKOs(
         if (!grouped.has(m.move.id)) { grouped.set(m.move.id, []); order.push(m.move.id); }
         grouped.get(m.move.id)!.push(m);
       }
+      // Within each group sort by variant type: nature first → neutral → item required.
+      // Priority: 0 = nature variant (no item), 1 = nature + item, 2 = neutral (no item), 3 = neutral + item.
+      const variantPriority = (m: OHKOMoveInfo) =>
+        m.nature !== undefined ? (m.item ? 1 : 0) : (m.item ? 3 : 2);
+      for (const id of order) grouped.get(id)!.sort((a, b) => variantPriority(a) - variantPriority(b));
       movesPerTarget[i] = order.flatMap(id => grouped.get(id)!);
     }
 
