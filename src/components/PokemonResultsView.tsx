@@ -1401,24 +1401,6 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                       </span>
                     </Tooltip>
                   )}
-                  {/* Defensive ability chip */}
-                  {m.defAbility && (
-                    <Tooltip
-                      content={`Target's ${m.defAbility.name} ${m.defAbility.mult < 1 ? `reduces incoming ${data.typeNames.get(m.move.typeId) ?? ''}-type damage (×${m.defAbility.mult})` : `amplifies incoming ${data.typeNames.get(m.move.typeId) ?? ''}-type damage (×${m.defAbility.mult})`}`}
-                      side="bottom"
-                    >
-                      <span style={{
-                        fontSize: '10px', fontWeight: 700, cursor: 'help',
-                        background: m.defAbility.mult < 1 ? '#ebf8ff' : '#fff5f5',
-                        color:      m.defAbility.mult < 1 ? '#2c5282' : '#9b2335',
-                        border:     `1px solid ${m.defAbility.mult < 1 ? '#90cdf4' : '#fc8181'}`,
-                        borderRadius: '3px', padding: '1px 5px',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        🛡 {m.defAbility.name}
-                      </span>
-                    </Tooltip>
-                  )}
                   {/* Coverage chip */}
                   {totalTargets > 1 && m.coveredTargetIndices.length > 1 && (
                     <Tooltip
