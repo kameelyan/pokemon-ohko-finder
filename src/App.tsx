@@ -1097,6 +1097,15 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
               src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${selected.id}.png`}
               alt={selected.name} width={48} height={48}
               style={{ imageRendering: 'pixelated' }}
+              onError={e => {
+                const img = e.target as HTMLImageElement;
+                if (!img.dataset.fallback) {
+                  img.dataset.fallback = '1';
+                  img.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${selected.id}.png`;
+                } else {
+                  img.style.display = 'none';
+                }
+              }}
             />
             <div>
               <div style={{ fontWeight: 700, fontSize: '14px' }}>{selected.name}</div>
