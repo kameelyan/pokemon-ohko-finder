@@ -5,6 +5,30 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.10.0',
+    date: 'May 2026',
+    title: 'Target Ability Support',
+    sections: [
+      {
+        heading: '🧬 Target Ability Selector',
+        items: [
+          'Each target Pokémon panel now shows its available abilities as selectable chips. Click one to set which ability the target is running in battle.',
+          'The selected ability is applied directly to damage calculations — type immunities cause moves to be hidden from results entirely, and damage modifiers adjust the EV requirement accordingly.',
+          'Supported immunities: Levitate & Earth Eater (Ground), Flash Fire & Well-Baked Body (Fire), Volt Absorb, Lightning Rod & Motor Drive (Electric), Water Absorb, Storm Drain & Dry Skin (Water), Sap Sipper (Grass), Soundproof (sound moves), Wonder Guard (non-super-effective moves).',
+          'Supported damage modifiers: Thick Fat (Fire/Ice ×0.5), Heatproof & Water Bubble (Fire ×0.5), Fluffy (contact ×0.5, Fire ×2), Filter, Solid Rock & Prism Armor (super-effective ×0.75), Multiscale & Shadow Shield (×0.5 at full HP), Fur Coat (physical ×0.5), Ice Scales (special ×0.5), Punk Rock (sound ×0.5).',
+          'When an ability increases the EV requirement, a 🛡 chip appears on the move row. The chip tooltip explains the multiplier and how many extra EVs or SPs the ability accounts for.',
+          'Hidden abilities are labelled (H). The selected ability is saved and restored with the rest of your target settings.',
+        ],
+      },
+      {
+        heading: '🐛 Bug Fix',
+        items: [
+          'In SP mode, the attacker EV search was still stepping in increments of 4 instead of 8, which could produce fractional SP values (e.g. 0.5 SPs). The search now correctly steps in increments of 8 in SP mode, guaranteeing whole-number results.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.9.0',
     date: 'May 2026',
     title: 'Champions Stat Points (SP) Mode',
