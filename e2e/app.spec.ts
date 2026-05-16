@@ -240,3 +240,50 @@ test('shows empty state when no target is selected', async ({ page }) => {
   // Without a target, results area should show the "search for a Pokémon" prompt
   await expect(page.getByText(/Search for a Pokémon above/i)).toBeVisible();
 });
+
+// ─── Sturdy ability selection ─────────────────────────────────────────────────
+
+test('selecting Sturdy ability reduces result count vs another ability', async ({ page }) => {
+  await page.goto('/pokemon-ohko-finder/');
+
+  // Steelix is in the Champions roster and has Rock Head (default) + Sturdy + Sheer Force
+  const targetSearch = page.getByPlaceholder('Search Pokémon...').first();
+  await targetSearch.click();
+  await targetSearch.fill('Steelix');
+  await page.getByText('Steelix').first().click();
+
+  // Wait for initial results — defaults to Rock Head (no special restrictions)
+  await expect(page.locator('[data-tour="results-list"] > div').first()).toBeVisible();
+  const rockHeadCount = await page.locator('[data-tour="results-list"] > div').count();
+
+  // Switch to Sturdy — single-hit moves can no longer OHKO; only multi-hit and Mold Breaker remain
+  await page.getByRole('button', { name: /Sturdy/i }).click();
+
+  // Sturdy should reduce the attacker pool significantly
+  const stuardyCount = await page.locator('[data-tour="results-list"] > div').count();
+  expect(stuardyCount).toBeLessThan(rockHeadCount);
+});
+
+test('expanding a Sturdy-break result shows the "Breaks Sturdy" chip', async ({ page }) => {
+  await page.goto('/pokemon-ohko-finder/');
+
+  // Steelix is in the Champions roster and has Sturdy
+  const targetSearch = page.getByPlaceholder('Search Pokémon...').first();
+  await targetSearch.click();
+  await targetSearch.fill('Steelix');
+  await page.getByText('Steelix').first().click();
+
+  // Select Sturdy ability
+  await page.getByRole('button', { name: /Sturdy/i }).click();
+
+  // At least one result should be visible (multi-hit / Mold Breaker attackers break through Sturdy)
+  const firstCard = page.locator('[data-tour="results-list"] > div').first();
+  await expect(firstCard).toBeVisible();
+
+  // Expand all results so move tables are visible
+  await page.getByRole('button', { name: /Expand all/i }).click();
+  await expect(page.locator('.ohko-move-table').first()).toBeVisible();
+
+  // The "Breaks Sturdy" chip should appear in at least one move row
+  await expect(page.getByText(/Breaks Sturdy/i).first()).toBeVisible();
+});
