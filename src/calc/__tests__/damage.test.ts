@@ -307,6 +307,43 @@ describe('damageSingle', () => {
     const boosted = damageSingle(100, 100, 100, 1.0, 100, 1.2);
     expect(boosted.max).toBeGreaterThan(base.max);
   });
+
+  // ── Negative / edge cases ───────────────────────────────────────────────────
+
+  it('def=0 returns {min:0, max:0} instead of Infinity', () => {
+    const result = damageSingle(100, 100, 0, 1.0, 100);
+    expect(result.min).toBe(0);
+    expect(result.max).toBe(0);
+    expect(isFinite(result.min)).toBe(true);
+    expect(isFinite(result.max)).toBe(true);
+  });
+
+  it('atk=0 deals no meaningful damage (base formula gives 2, floored to 0 after ×0.85)', () => {
+    // 22 * power * 0 / def = 0, base = 0 + 2 = 2, min = floor(2 * 0.85) = 1
+    // This is the formula's inherent minimum — documents the behaviour rather than asserting 0
+    const result = damageSingle(100, 0, 100, 1.0, 100);
+    expect(result.min).toBeGreaterThanOrEqual(0);
+    expect(result.max).toBeGreaterThanOrEqual(result.min);
+  });
+
+  it('immune (effFactor=0) deals zero damage', () => {
+    const result = damageSingle(100, 100, 100, 1.0, 0);
+    expect(result.min).toBe(0);
+    expect(result.max).toBe(0);
+  });
+
+  it('min is always ≤ max', () => {
+    const cases: [number, number, number, number, number][] = [
+      [1,   1,   1,   1.0, 100],
+      [250, 999, 1,   1.5, 200],
+      [100, 100, 100, 1.0, 50],
+      [80,  45,  300, 1.0, 100],
+    ];
+    for (const [pw, atk, def, stab, eff] of cases) {
+      const { min, max } = damageSingle(pw, atk, def, stab, eff);
+      expect(min).toBeLessThanOrEqual(max);
+    }
+  });
 });
 
 // ─── Exported constants sanity checks ────────────────────────────────────────

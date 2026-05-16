@@ -186,4 +186,93 @@ describe('minSpeedEVs', () => {
     const result = minSpeedEVs(70, 110, 1.0);
     if (result !== null) expect(result % 4).toBe(0);
   });
+
+  // ── Negative / edge cases ─────────────────────────────────────────────────
+
+  it('targetSpeed=0 is beaten by any positive uninvested speed → returns 0', () => {
+    // Any Pokémon with base speed ≥ 1 has uninvested speed > 0, beating target of 0
+    expect(minSpeedEVs(50, 0, 1.0)).toBe(0);
+  });
+
+  it('natureMult=0 → stat is always 0, cannot outspeed any positive target → null', () => {
+    // calcStat × 0 = 0; 0 is never > any positive targetSpeed
+    expect(minSpeedEVs(100, 50, 0)).toBeNull();
+  });
+
+  it('natureMult=0 with targetSpeed ≤ 0 → 0 EVs (0 > negative target)', () => {
+    // 0 > -1 is true, so first iteration returns 0 EVs
+    expect(minSpeedEVs(100, -1, 0)).toBe(0);
+  });
+
+  it('result never exceeds maxEV cap', () => {
+    // Even in a near-impossible case, result must be ≤ maxEV or null
+    const result = minSpeedEVs(5, 90, 1.0);
+    if (result !== null) expect(result).toBeLessThanOrEqual(252);
+  });
+});
+
+// ─── countActiveFilters — all-active edge case ────────────────────────────────
+
+describe('countActiveFilters — exhaustive combinations', () => {
+  it('counts 0 for completely empty state', () => {
+    const f = {
+      types: new Set<number>(),
+      minSpe: '', maxSpe: '',
+      outspeed: 'any' as const,
+      category: 'all' as const,
+      noEvs: false, noItem: false, defaultOnly: false,
+      excludedForms: new Set<'mega' | 'regional' | 'gmax' | 'other'>(),
+      excludedFlags: new Set<MoveFlag>(),
+    };
+    expect(countActiveFilters(f, 0, false)).toBe(0);
+  });
+
+  it('counts all 12 possible active filters when everything is set', () => {
+    const f = {
+      types: new Set([10, 11]),     // +2
+      minSpe: '80',                  // +1
+      maxSpe: '150',                 // +1
+      outspeed: 'all' as const,      // +1
+      category: 'physical' as const, // +1
+      noEvs: true,                   // +1
+      noItem: true,                  // +1
+      defaultOnly: true,             // +1
+      excludedForms: new Set(['mega' as const]), // +1
+      excludedFlags: new Set(['contact' as MoveFlag]), // +1
+    };
+    // types(2) + minSpe(1) + maxSpe(1) + outspeed(1) + category(1) + noEvs(1) + noItem(1)
+    // + defaultOnly(1) + excludedForms(1) + excludedFlags(1) + showPossible(1) + minAccuracy(1) = 13
+    expect(countActiveFilters(f, 80, true)).toBe(13);
+  });
+
+  it('minSpe empty string does not count, non-empty string does', () => {
+    const base = { types: new Set<number>(), minSpe: '', maxSpe: '', outspeed: 'any' as const, category: 'all' as const, noEvs: false, noItem: false, defaultOnly: false, excludedForms: new Set<'mega' | 'regional' | 'gmax' | 'other'>(), excludedFlags: new Set<MoveFlag>() };
+    expect(countActiveFilters({ ...base, minSpe: '' }, 0, false)).toBe(0);
+    expect(countActiveFilters({ ...base, minSpe: '0' }, 0, false)).toBe(1);
+    expect(countActiveFilters({ ...base, minSpe: '0', maxSpe: '999' }, 0, false)).toBe(2);
+  });
+});
+
+// ─── getFormCategory — edge cases ────────────────────────────────────────────
+
+describe('getFormCategory — edge cases', () => {
+  it('empty string identifier (non-default) → "other"', () => {
+    expect(getFormCategory('', false)).toBe('other');
+  });
+
+  it('identifier with no known suffix → "other"', () => {
+    expect(getFormCategory('castform-snowy', false)).toBe('other');
+    expect(getFormCategory('wormadam-plant', false)).toBe('other');
+  });
+
+  it('mega takes priority over other suffixes if both present', () => {
+    // pathological — real identifiers never have both, but the function checks in order
+    expect(getFormCategory('something-mega-alola', false)).toBe('mega');
+  });
+
+  it('default=true always returns null regardless of identifier', () => {
+    expect(getFormCategory('', true)).toBeNull();
+    expect(getFormCategory('pikachu-original', true)).toBeNull();
+    expect(getFormCategory('charizard-mega', true)).toBeNull();
+  });
 });

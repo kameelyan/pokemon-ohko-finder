@@ -362,6 +362,7 @@ export function damageSingle(
   effFactor: number,
   itemMult = 1.0,
 ): { min: number; max: number } {
+  if (def <= 0) return { min: 0, max: 0 };
   const base = Math.floor(Math.floor(22 * power * atk / def) / 50) + 2;
   const afterStab = Math.floor(base * stabFactor);
   const afterType = Math.floor(afterStab * (effFactor / 100));
@@ -773,8 +774,8 @@ export function findPokemonOHKOs(
         if (noWeatherBest) {
           const useWeather = withWeatherBest &&
             withWeatherBest.attempt.evNeeded < noWeatherBest.attempt.evNeeded;
-          chosen = useWeather ? withWeatherBest!.attempt : noWeatherBest.attempt;
-          const src = useWeather ? withWeatherBest! : noWeatherBest;
+          chosen = useWeather ? withWeatherBest.attempt : noWeatherBest.attempt;
+          const src = useWeather ? withWeatherBest : noWeatherBest;
           abilityRequired = src.ability
             ? { identifier: src.ability.identifier, name: src.ability.name, isHidden: src.ability.isHidden }
             : undefined;
@@ -827,8 +828,8 @@ export function findPokemonOHKOs(
 
           if (nwNature) {
             const useWeather = wwNature && wwNature.attempt.evNeeded < nwNature.attempt.evNeeded;
-            natureChosen = useWeather ? wwNature!.attempt : nwNature.attempt;
-            const src = useWeather ? wwNature! : nwNature;
+            natureChosen = useWeather ? wwNature.attempt : nwNature.attempt;
+            const src = useWeather ? wwNature : nwNature;
             natureAbility = src.ability
               ? { identifier: src.ability.identifier, name: src.ability.name, isHidden: src.ability.isHidden }
               : undefined;

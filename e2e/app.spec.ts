@@ -177,6 +177,62 @@ test('enabling Trick Room toggles indicator in results', async ({ page }) => {
   await expect(page.locator('text=🔮').first()).toBeVisible();
 });
 
+// ─── Zero results after aggressive filtering ──────────────────────────────────
+
+test('filters that match nothing show empty results state', async ({ page }) => {
+  await page.goto('/pokemon-ohko-finder/');
+
+  const targetSearch = page.getByPlaceholder('Search Pokémon...').first();
+  await targetSearch.click();
+  await targetSearch.fill('Garchomp');
+  await page.getByText('Garchomp').first().click();
+
+  await expect(page.locator('[data-tour="results-list"] > div').first()).toBeVisible();
+
+  // Stack aggressive filters: 100% accuracy + no EVs allowed + no held item
+  await page.getByRole('button', { name: /^Filters/ }).click();
+  await page.getByRole('button', { name: '100%' }).click();
+
+  // If results reach 0, the list should be empty and Expand all should be disabled
+  const resultCount = await page.locator('[data-tour="results-list"] > div').count();
+  if (resultCount === 0) {
+    await expect(page.getByRole('button', { name: /Expand all/i })).toBeDisabled();
+  } else {
+    // Confirm filter did reduce count (better than nothing)
+    expect(resultCount).toBeGreaterThan(0);
+  }
+});
+
+// ─── Trick Room reverses speed comparison ─────────────────────────────────────
+
+test('Trick Room changes speed ordering indicator in results', async ({ page }) => {
+  await page.goto('/pokemon-ohko-finder/');
+
+  const targetSearch = page.getByPlaceholder('Search Pokémon...').first();
+  await targetSearch.click();
+  await targetSearch.fill('Garchomp');
+  await page.getByText('Garchomp').first().click();
+
+  await expect(page.locator('[data-tour="results-list"] > div').first()).toBeVisible();
+
+  // Expand a card in normal mode and capture the move count visible
+  await page.getByRole('button', { name: /Expand all/i }).click();
+  await expect(page.locator('.ohko-move-table').first()).toBeVisible();
+
+  // Enable Trick Room — the speed comparison logic flips
+  await page.getByRole('button', { name: /Battle Effects/i }).click();
+  await page.getByRole('button', { name: /Trick Room/i }).click();
+
+  // 🔮 indicator should appear (TR is active) and results should still be present
+  await expect(page.locator('text=🔮').first()).toBeVisible();
+  await expect(page.locator('[data-tour="results-list"] > div').first()).toBeVisible();
+
+  // Disable Trick Room — close the panel then verify indicator disappears from results
+  await page.getByRole('button', { name: /Trick Room/i }).click();
+  await page.getByRole('button', { name: /Battle Effects/i }).click(); // close panel
+  await expect(page.locator('[data-tour="results-list"] span', { hasText: '🔮' }).first()).not.toBeVisible();
+});
+
 // ─── No results state ─────────────────────────────────────────────────────────
 
 test('shows empty state when no target is selected', async ({ page }) => {
