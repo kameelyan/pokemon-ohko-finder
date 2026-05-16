@@ -5,6 +5,21 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.11.0',
+    date: 'May 2026',
+    title: 'Guided Tour',
+    sections: [
+      {
+        heading: '🧭 How to Use',
+        items: [
+          'A new "❓ How to use" button in the header launches a step-by-step guided tour of the tool.',
+          'The tour highlights each section of the UI in sequence — target search, ability selector, stat investment, battle format controls, attacker conditions, sort controls, and reading the results.',
+          'Click Next / Back, use the dot indicators to jump to any step, or press the arrow keys to navigate. Press Escape or click the backdrop to dismiss at any time.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.10.1',
     date: 'May 2026',
     title: 'Choice Item & Mega Fixes',

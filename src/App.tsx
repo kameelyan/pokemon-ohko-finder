@@ -8,6 +8,8 @@ import PokemonResultsView from './components/PokemonResultsView';
 import ReleaseNotes from './components/ReleaseNotes';
 import TypeBadge from './components/TypeBadge';
 import Tooltip from './components/Tooltip';
+import GuidedTour from './components/GuidedTour';
+import type { TourStep } from './components/GuidedTour';
 import { APP_VERSION } from './version';
 
 const DEFAULT_EVS: EVSpread = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
@@ -134,6 +136,150 @@ function makeSlot(): TargetSlot {
   return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false, heldItem: null, reflect: false, lightScreen: false, nature: 'Neutral', tailwind: false, friendGuard: false, atkStage: 0, defStage: 0, spdStage: 0, speStage: 0, ability: null };
 }
 
+// ── Guided tour steps ────────────────────────────────────────────────────────
+// Defined outside the component so JSX objects are stable across re-renders.
+const TOUR_STEPS: TourStep[] = [
+  {
+    id: 'welcome',
+    title: '👋 Welcome to OHKO Finder!',
+    content: (
+      <div>
+        <p style={{ margin: '0 0 10px' }}>
+          This tool helps you find every Pokémon that can <strong>one-hit KO</strong> your targets
+          in competitive Level 50 play.
+        </p>
+        <p style={{ margin: 0, color: '#666' }}>
+          Let's walk through the key features — use the <strong>Next</strong> button or arrow keys to move between steps.
+        </p>
+      </div>
+    ),
+    target: null,
+  },
+  {
+    id: 'add-target',
+    title: '🎯 Step 1: Add a Target Pokémon',
+    content: (
+      <div>
+        <p style={{ margin: '0 0 10px' }}>
+          Type any Pokémon's name into the search box to add it as a target.
+        </p>
+        <p style={{ margin: 0, color: '#666' }}>
+          You can add <strong>up to 6 targets</strong> — the results will show Pokémon
+          that can OHKO <em>all</em> of them simultaneously.
+        </p>
+      </div>
+    ),
+    target: '[data-tour="target-search"]',
+    placement: 'bottom',
+  },
+  {
+    id: 'ability',
+    title: '🧬 Step 2: Set the Target\'s Ability',
+    content: (
+      <div>
+        <p style={{ margin: '0 0 10px' }}>
+          Select the ability the target is running. Abilities like <strong>Thick Fat</strong>,
+          <strong> Water Absorb</strong>, and <strong>Levitate</strong> affect incoming damage
+          and are factored into the calculation.
+        </p>
+        <p style={{ margin: 0, color: '#666' }}>
+          Hidden abilities are marked with <strong>(H)</strong>.
+        </p>
+      </div>
+    ),
+    target: '[data-tour="target-ability"]',
+    placement: 'bottom',
+  },
+  {
+    id: 'evs',
+    title: '📊 Step 3: Configure Stat Investment',
+    content: (
+      <div>
+        <p style={{ margin: '0 0 10px' }}>
+          Set the target's EV (or SP) investment per stat. The tool calculates the
+          exact OHKO threshold based on these values at Level 50 with 31 IVs.
+        </p>
+        <p style={{ margin: 0, color: '#666' }}>
+          Switch between <strong>EV</strong> and <strong>SP</strong> modes using
+          the toggle in the top-right corner.
+        </p>
+      </div>
+    ),
+    target: '[data-tour="target-evs"]',
+    placement: 'bottom',
+  },
+  {
+    id: 'format',
+    title: '⚙️ Step 4: Battle Format & Mode',
+    content: (
+      <div>
+        <p style={{ margin: '0 0 10px' }}>
+          Choose your <strong>battle format</strong> — spread moves deal ×0.75 in Doubles.
+          Toggle <strong>Pokémon Champions</strong> mode to restrict results to the official roster.
+          Switch between <strong>EVs</strong> and <strong>SPs</strong> stat display.
+        </p>
+      </div>
+    ),
+    target: '[data-tour="format-controls"]',
+    placement: 'bottom',
+  },
+  {
+    id: 'attacker',
+    title: '🌩 Step 5: Attacker Conditions',
+    content: (
+      <div>
+        <p style={{ margin: '0 0 10px' }}>
+          Set conditions for the <strong>attacker</strong>: weather, terrain, choice items,
+          stat stage boosts, and more.
+        </p>
+        <p style={{ margin: 0, color: '#666' }}>
+          These affect which Pokémon qualify for the OHKO and how much EV investment
+          they need to achieve it.
+        </p>
+      </div>
+    ),
+    target: '[data-tour="attacker-controls"]',
+    placement: 'bottom',
+  },
+  {
+    id: 'sort',
+    title: '🔢 Step 6: Sort the Results',
+    content: (
+      <div>
+        <p style={{ margin: '0 0 10px' }}>
+          Use the <strong>Sort</strong> dropdown to order results by BST, name, or any
+          individual stat. Toggle the <strong>↑ / ↓</strong> button to switch between
+          ascending and descending order.
+        </p>
+        <p style={{ margin: 0, color: '#666' }}>
+          The search box next to it lets you filter results by Pokémon or move name.
+        </p>
+      </div>
+    ),
+    target: '[data-tour="sort-controls"]',
+    placement: 'bottom',
+  },
+  {
+    id: 'results',
+    title: '📋 Step 7: Reading the Results',
+    content: (
+      <div>
+        <p style={{ margin: '0 0 10px' }}>
+          Each row shows a Pokémon with a move that can OHKO your targets. Expand any row
+          to see the <strong>EVs required</strong>, whether it's <strong>guaranteed</strong> or
+          <strong> possible</strong>, the move's accuracy, and any held items needed.
+        </p>
+        <p style={{ margin: 0, color: '#666' }}>
+          Use the <strong>Filters</strong> button to narrow down results by type, speed,
+          move category, and more.
+        </p>
+      </div>
+    ),
+    target: '[data-tour="results-list"]',
+    placement: 'top',
+  },
+];
+
 export default function App() {
   const [data, setData] = useState<GameData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -163,6 +309,7 @@ export default function App() {
     const saved = localStorage.getItem(STAT_MODE_KEY);
     return saved === 'sp' ? 'sp' : 'ev';
   });
+  const [tourActive, setTourActive] = useState(false);
 
   useEffect(() => {
     loadGameData()
@@ -351,6 +498,24 @@ export default function App() {
               v{APP_VERSION}
             </span>
             <div style={{ display: 'flex', alignItems: 'stretch', gap: '8px' }}>
+              <button
+                onClick={() => setTourActive(true)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  background: 'rgba(255,255,255,0.15)',
+                  color: '#fff',
+                  fontSize: '12px', fontWeight: 700,
+                  padding: '5px 12px', borderRadius: '6px',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.25)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
+                data-tour="how-to-use-btn"
+              >
+                ❓ How to use
+              </button>
               <a
                 href="https://github.com/kameelyan/pokemon-ohko-finder"
                 target="_blank"
@@ -497,7 +662,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }} data-tour="format-controls">
                   {/* Singles / Doubles toggle */}
                   <Tooltip
                     content={
@@ -657,13 +822,15 @@ export default function App() {
               </div>
 
               {/* Target grid */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))',
-                gap: '20px',
-                marginBottom: '20px',
-                minWidth: 0,
-              }}>
+              <div
+                data-tour="target-grid"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))',
+                  gap: '20px',
+                  marginBottom: '20px',
+                  minWidth: 0,
+                }}>
                 {slots.map((slot, idx) => (
                   <TargetPanel
                     key={slot.id}
@@ -743,10 +910,12 @@ export default function App() {
 
             {/* Results */}
             {activeTargets.length > 0 && (
-              <div style={{
-                background: '#fff', borderRadius: '12px', padding: '24px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
-              }}>
+              <div
+                data-tour="results"
+                style={{
+                  background: '#fff', borderRadius: '12px', padding: '24px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
+                }}>
                 <PokemonResultsView
                   title={computing ? '⏳ Computing…' : resultLabel}
                   results={results}
@@ -795,6 +964,10 @@ export default function App() {
           </>
         )}
       </main>
+
+      {tourActive && (
+        <GuidedTour steps={TOUR_STEPS} onDone={() => setTourActive(false)} />
+      )}
     </div>
   );
 }
@@ -914,7 +1087,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
 
       <label style={labelStyle}>{label}</label>
 
-      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }} data-tour="target-search">
         <PokemonSearch pokemon={pokemon} onSelect={onSelect} />
       </div>
 
@@ -938,7 +1111,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
 
           {/* Ability selector */}
           {selected.abilities.length > 0 && (
-            <div style={{ marginBottom: '8px' }}>
+            <div style={{ marginBottom: '8px' }} data-tour="target-ability">
               <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Ability
               </div>
@@ -1079,7 +1252,7 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
             const stepVal = isSP ? 1 : 4;
             return (
               <>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }} data-tour="target-evs">
                   <EVInput label={`HP ${unit}`}  value={evs.hp}  onChange={v => onEvsChange({ ...evs, hp: v })}  error={investError} max={maxVal} step={stepVal} />
                   <EVInput label={`Atk ${unit}`} value={evs.atk} onChange={v => onEvsChange({ ...evs, atk: v })} error={investError} max={maxVal} step={stepVal} />
                   <EVInput label={`Def ${unit}`} value={evs.def} onChange={v => onEvsChange({ ...evs, def: v })} error={investError} max={maxVal} step={stepVal} />
