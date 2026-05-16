@@ -5,6 +5,21 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.15.0',
+    date: 'May 2026',
+    title: 'Weather Damage Fix',
+    sections: [
+      {
+        heading: '🐛 Bug Fixes',
+        items: [
+          'Weather conditions now correctly update all displayed damage numbers. Previously, enabling Snow against an Ice-type target or Sand against a Rock-type target would not reduce the physical/special damage shown — the UI was displaying pre-weather values.',
+          'Offensive weather nerfs (Sun weakening Water moves ×0.5, Rain weakening Fire moves ×0.5) were similarly not reflected in displayed damage numbers. Both are now correct.',
+          'Moves that can only OHKO under a specific weather condition (e.g. Charizard\'s Solar Power in Sun) continue to appear with the weather-required chip, and correctly disappear when that weather is not active.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.14.0',
     date: 'May 2026',
     title: 'Test Coverage & Weather Defense Verification',
