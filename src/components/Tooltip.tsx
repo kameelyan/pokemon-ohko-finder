@@ -1,4 +1,5 @@
 import { useState, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 interface Props {
   children: React.ReactNode;
@@ -74,5 +75,8 @@ function TooltipPortal({
     opacity: measured ? 1 : 0,
   };
 
-  return <span ref={ref} style={style}>{children}</span>;
+  return createPortal(
+    <span ref={ref} style={style}>{children}</span>,
+    document.body
+  );
 }
