@@ -172,16 +172,18 @@ export const WEATHER_INFO: Record<Exclude<Weather, 'none'>, {
   color: string;
   description: string;
 }> = {
-  sun:  { label: 'Sun',  icon: '☀️',  bg: '#fef9c3', color: '#713f12', description: 'Boosts Fire-type moves ×1.5. Powers up Solar Power ability.' },
-  rain: { label: 'Rain', icon: '🌧️', bg: '#dbeafe', color: '#1e3a8a', description: 'Boosts Water-type moves ×1.5. Powers up Swift Swim.' },
-  sand: { label: 'Sand', icon: '🌪️', bg: '#fef3c7', color: '#78350f', description: 'Powers up Sand Force ability (Rock/Ground/Steel ×1.3).' },
-  snow: { label: 'Snow', icon: '❄️',  bg: '#e0f2fe', color: '#075985', description: 'Boosts Ice-type Defense ×1.5. No direct offensive boost.' },
+  sun:  { label: 'Sun',  icon: '☀️',  bg: '#fef9c3', color: '#713f12', description: 'Fire moves ×1.5. Water moves ×0.5. Powers up Solar Power ability.' },
+  rain: { label: 'Rain', icon: '🌧️', bg: '#dbeafe', color: '#1e3a8a', description: 'Water moves ×1.5. Fire moves ×0.5. Powers up Swift Swim.' },
+  sand: { label: 'Sand', icon: '🌪️', bg: '#fef3c7', color: '#78350f', description: 'Rock-type Sp. Def ×1.5. Powers up Sand Force ability (Rock/Ground/Steel ×1.3).' },
+  snow: { label: 'Snow', icon: '❄️',  bg: '#e0f2fe', color: '#075985', description: 'Ice-type Defense ×1.5. Blizzard never misses.' },
 };
 
 /** Multiplier that weather applies to a move's effective type (after ability type override). */
 function getWeatherMult(weather: Weather, effectiveTypeId: number): number {
-  if (weather === 'sun'  && effectiveTypeId === 10) return 1.5; // Fire
-  if (weather === 'rain' && effectiveTypeId === 11) return 1.5; // Water
+  if (weather === 'sun'  && effectiveTypeId === 10) return 1.5; // Fire boosted
+  if (weather === 'sun'  && effectiveTypeId === 11) return 0.5; // Water weakened
+  if (weather === 'rain' && effectiveTypeId === 11) return 1.5; // Water boosted
+  if (weather === 'rain' && effectiveTypeId === 10) return 0.5; // Fire weakened
   return 1.0;
 }
 
@@ -535,7 +537,16 @@ function tryOHKO(
   // Screen type is based on move category (Psyshock is special → Light Screen applies)
   const screenDefMult = isDoubles ? 1.5 : 2.0;
   const screenMult = isPhysical ? (ts.reflect ? screenDefMult : 1.0) : (ts.lightScreen ? screenDefMult : 1.0);
-  const defStat = Math.floor(rawDef * targetStageMult * statMult * screenMult);
+  // Weather-based defensive stat boosts on the target:
+  //   Sand → Rock-type Pokémon gain ×1.5 Sp. Def (special moves only; Psyshock hits Def so not affected)
+  //   Snow → Ice-type Pokémon gain ×1.5 Def (physical moves and Psyshock)
+  const hitsSpDef = !isPhysical && !isPsyshock;
+  const hitsDef   =  isPhysical ||  isPsyshock;
+  const weatherStatMult =
+    (weather === 'sand' && hitsSpDef && ts.pokemon.typeIds.includes(6))  ? 1.5 : // Rock SpDef
+    (weather === 'snow' && hitsDef   && ts.pokemon.typeIds.includes(15)) ? 1.5 : // Ice Def
+    1.0;
+  const defStat = Math.floor(rawDef * targetStageMult * statMult * screenMult * weatherStatMult);
 
   // Attacker stat stage — physical uses atkStage, special uses spaStage.
   // Foul Play uses the target's Attack, so attacker stages don't apply.
