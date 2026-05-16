@@ -414,6 +414,25 @@ export function damageSingle(
   return { min: minDmg, max: maxDmg };
 }
 
+/** Power of Low Kick / Grass Knot based on target weight in kg. */
+function lowKickPower(kg: number): number {
+  if (kg >= 200) return 120;
+  if (kg >= 100) return 100;
+  if (kg >= 50)  return 80;
+  if (kg >= 25)  return 60;
+  if (kg >= 10)  return 40;
+  return 20;
+}
+
+/** Power of Heavy Slam / Heat Crash based on (attacker weight) / (target weight) ratio. */
+function heavySlamPower(ratio: number): number {
+  if (ratio > 5) return 120;
+  if (ratio > 4) return 100;
+  if (ratio > 3) return 80;
+  if (ratio > 2) return 60;
+  return 40;
+}
+
 function getEffectiveness(
   moveTypeId: number,
   targetTypeIds: number[],
@@ -454,6 +473,8 @@ interface TargetStats {
   atk: number;  // used by Foul Play
   def: number;
   spd: number;
+  spe: number;    // target's Speed stat (used by Gyro Ball)
+  weight: number; // target's weight in kg (used by Heavy Slam / Low Kick)
   defMult: number;
   spdMult: number;
   accuracyMult: number;
@@ -572,11 +593,20 @@ function tryOHKO(
   spaNatureMult = 1.0,
   evStep = 4,
   maxAttackerEV = 252,
+  attackerWeight: number = 0,
+  attackerSpe: number = 0,
   /** Whether the attacker has Mold Breaker, Teravolt, or Turboblaze (bypasses Sturdy). */
   hasMoldBreaker = false,
   /** Whether the attacker has Parental Bond (Mega Kangaskhan), which also bypasses Sturdy. */
   hasParentalBond = false,
 ): OHKOAttempt | null {
+  // ── Two-turn move filter ───────────────────────────────────────────────────
+  // Moves that require a charge turn cannot OHKO in a single action.
+  // Solar Beam/Blade are one-turn in Sun; Electro Shot is one-turn in Rain.
+  if (move.twoTurn === 'always') return null;
+  if (move.twoTurn === 'no-sun'  && weather !== 'sun')  return null;
+  if (move.twoTurn === 'no-rain' && weather !== 'rain') return null;
+
   const effectiveTypeId = abilityMod?.typeOverride ?? move.typeId;
 
   // Gravity boosts all finite accuracy values by ×5/3 (capped at 100)
@@ -697,10 +727,26 @@ function tryOHKO(
   const spreadMult = (isDoubles && move.isSpread) ? 0.75 : 1.0;
   // Friend Guard (doubles only): adjacent ally reduces all incoming damage by ×0.75
   const friendGuardMult = ts.friendGuard ? 0.75 : 1.0;
+  // ── Variable-power moves ───────────────────────────────────────────────────
+  // Low Kick / Grass Knot: power scales with target weight.
+  // Heavy Slam / Heat Crash: power scales with attacker/target weight ratio.
+  // Gyro Ball: power = min(150, floor(25 × targetSpe / attackerSpe)); slower attacker = more power.
+  let resolvedPower = move.power;
+  if (move.variablePower === 'low-kick') {
+    resolvedPower = lowKickPower(ts.weight);
+  } else if (move.variablePower === 'heavy-slam') {
+    if (ts.weight <= 0) return null;
+    resolvedPower = heavySlamPower(attackerWeight / ts.weight);
+  } else if (move.variablePower === 'gyro-ball') {
+    if (attackerSpe <= 0) return null;
+    resolvedPower = Math.min(150, Math.floor(25 * ts.spe / attackerSpe));
+    if (resolvedPower <= 0) return null;
+  }
+
   // Avalanche / Revenge / Payback: always calculated at double power.
   // These moves are only ever used when the condition applies (going last / being hit first).
   const goingSecondMult = GOING_SECOND_EFFECT_IDS.has(move.effectId) ? 2.0 : 1.0;
-  const effectivePower = move.power * goingSecondMult * (abilityMod?.powerMult ?? 1.0) * weatherMult * terrainMult * fairyAuraMult * spreadMult * friendGuardMult * defAbilityMult;
+  const effectivePower = resolvedPower * goingSecondMult * (abilityMod?.powerMult ?? 1.0) * weatherMult * terrainMult * fairyAuraMult * spreadMult * friendGuardMult * defAbilityMult;
   const needsGoingSecond = goingSecondMult === 2.0;
   let activePower = effectivePower; // may be doubled for Round
   let needsRoundBoost = false;
@@ -850,6 +896,8 @@ export function findPokemonOHKOs(
     atk: calcStat(t.pokemon.stats.atk, t.evs.atk, 31, 50, t.atkNature ?? 1.0),
     def: calcStat(t.pokemon.stats.def, t.evs.def, 31, 50, t.defNature ?? 1.0),
     spd: calcStat(t.pokemon.stats.spd, t.evs.spd, 31, 50, t.spdNature ?? 1.0),
+    spe: calcStat(t.pokemon.stats.spe, t.evs.spe ?? 0, 31, 50, t.speNature ?? 1.0),
+    weight: t.pokemon.weight,
     defMult: t.heldItem?.defMult ?? 1.0,
     spdMult: t.heldItem?.spdMult ?? 1.0,
     accuracyMult: t.heldItem?.accuracyMult ?? 1.0,
@@ -874,6 +922,7 @@ export function findPokemonOHKOs(
     // These affect Sturdy bypass logic inside tryOHKO.
     const hasMoldBreaker = attacker.abilities.some(a => STURDY_BYPASS_ABILITIES.has(a.identifier));
     const hasParentalBond = attacker.id === PARENTAL_BOND_POKEMON_ID;
+    const attackerSpe = calcStat(attacker.stats.spe, 0, 31, 50, 1.0);
 
     const movesPerTarget: OHKOMoveInfo[][] = targets.map(() => []);
 
@@ -925,7 +974,7 @@ export function findPokemonOHKOs(
       const tryConfigs = (configs: AbilityConfig[], w: Weather, ts: TargetStats, atkNM = 1.0, spaNM = 1.0) => {
         let best: { attempt: OHKOAttempt; ability: typeof attacker.abilities[0] | null } | null = null;
         for (const { mod, ability } of configs) {
-          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, atkNM, spaNM, evStep, maxAttackerEV, hasMoldBreaker, hasParentalBond);
+          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, atkNM, spaNM, evStep, maxAttackerEV, attacker.weight, attackerSpe, hasMoldBreaker, hasParentalBond);
           if (attempt && (!best || attempt.evNeeded < best.attempt.evNeeded)) {
             best = { attempt, ability };
           }

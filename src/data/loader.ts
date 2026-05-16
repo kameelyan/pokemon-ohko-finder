@@ -164,6 +164,7 @@ export async function loadGameData(): Promise<GameData> {
         description: a.description,
         isHidden: a.isHidden,
       })),
+      weight: Number(row.weight) / 10,
     });
   }
 
@@ -199,6 +200,27 @@ export async function loadGameData(): Promise<GameData> {
   };
   // ────────────────────────────────────────────────────────────────────────────
 
+  /** Effect IDs for moves that always require a charge turn and can never OHKO in one action. */
+  const TWO_TURN_ALWAYS_EFFECT_IDS = new Set([
+    146,  // Skull Bash (raises Def first turn)
+    156,  // Fly
+    256,  // Dive
+    257,  // Dig
+    264,  // Bounce
+    273,  // Shadow Force / Phantom Force (vanishes)
+    312,  // Sky Drop
+    332,  // Freeze Shock / Ice Burn
+  ]);
+  /** Move ID of Electro Shot — fires immediately in Rain, two-turn otherwise. */
+  const ELECTRO_SHOT_MOVE_ID = 905;
+
+  /** Effect IDs for moves whose power is computed from Pokémon weights or speeds. */
+  const VARIABLE_POWER_EFFECT_IDS: Record<number, 'low-kick' | 'heavy-slam' | 'gyro-ball'> = {
+    197: 'low-kick',   // Low Kick, Grass Knot
+    292: 'heavy-slam', // Heavy Slam, Heat Crash
+    220: 'gyro-ball',  // Gyro Ball
+  };
+
   // English move names (language_id = 9)
   const moveNames = new Map<number, string>();
   for (const row of moveNamesRows) {
@@ -207,19 +229,26 @@ export async function loadGameData(): Promise<GameData> {
     }
   }
 
-  // Moves (damaging only: power > 0, damage_class 2 or 3)
+  // Moves (damaging only: power > 0 or variable power, damage_class 2 or 3)
   const moves = new Map<number, Move>();
   for (const row of movesRows) {
     const power = Number(row.power);
     const damageClassId = Number(row.damage_class_id);
-    if (!power || power <= 0) continue;
     if (damageClassId !== 2 && damageClassId !== 3) continue;
     const id = Number(row.id);
+    const effectId = Number(row.effect_id) || 0;
+    const variablePower: Move['variablePower'] = VARIABLE_POWER_EFFECT_IDS[effectId];
+    if ((!power || power <= 0) && !variablePower) continue;
     const rawAcc = row.accuracy;
     const accuracy = rawAcc === '' || rawAcc === undefined ? null : Number(rawAcc);
-    const effectId = Number(row.effect_id) || 0;
     const multiHit: { min: number; max: number } | null =
       MULTI_HIT_MOVE_OVERRIDES[id] ?? MULTI_HIT_EFFECT_IDS[effectId] ?? null;
+
+    const twoTurn: Move['twoTurn'] =
+      TWO_TURN_ALWAYS_EFFECT_IDS.has(effectId) ? 'always'
+      : effectId === 152 ? 'no-sun'       // Solar Beam, Solar Blade
+      : id === ELECTRO_SHOT_MOVE_ID ? 'no-rain'
+      : undefined;
 
     moves.set(id, {
       id,
@@ -237,6 +266,8 @@ export async function loadGameData(): Promise<GameData> {
         ? Number(row.effect_chance) : null,
       isSpread: [9, 11].includes(Number(row.target_id)), // all-adjacent or all-adjacent-foes
       multiHit,
+      twoTurn,
+      variablePower,
     });
   }
 

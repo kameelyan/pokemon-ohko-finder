@@ -21,6 +21,7 @@ export interface Pokemon {
     spe: number;
   };
   abilities: PokemonAbility[];
+  weight: number; // kg (hectograms ÷ 10 from the CSV)
 }
 
 export type MoveFlag = 'contact' | 'punch' | 'sound' | 'powder' | 'bite' | 'pulse' | 'ballistics' | 'dance';
@@ -47,6 +48,20 @@ export interface Move {
    * them at base power as an approximation. Parental Bond is handled separately.
    */
   multiHit: { min: number; max: number } | null;
+  /**
+   * When set, this move requires a charge turn and cannot be used in a single action.
+   * 'always'  — always two-turn (Dig, Fly, Dive, Bounce, Shadow Force, Skull Bash, etc.)
+   * 'no-sun'  — fires immediately in Sun, two-turn otherwise (Solar Beam, Solar Blade)
+   * 'no-rain' — fires immediately in Rain, two-turn otherwise (Electro Shot)
+   */
+  twoTurn?: 'always' | 'no-sun' | 'no-rain';
+  /**
+   * When set, the move's power is computed at runtime from Pokémon weights or speeds.
+   * 'low-kick'   — based on target weight (Low Kick, Grass Knot)
+   * 'heavy-slam' — based on attacker/target weight ratio (Heavy Slam, Heat Crash)
+   * 'gyro-ball'  — based on target speed / attacker speed (Gyro Ball)
+   */
+  variablePower?: 'low-kick' | 'heavy-slam' | 'gyro-ball';
 }
 
 export interface PokemonMoveEntry {

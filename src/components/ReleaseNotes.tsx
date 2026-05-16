@@ -5,6 +5,23 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.17.0',
+    date: 'May 2026',
+    title: 'Two-Turn Moves, Weight & Speed-Based Moves',
+    sections: [
+      {
+        heading: '✨ New',
+        items: [
+          'Weight-based moves are now included in results. Low Kick and Grass Knot compute their power from the target\'s weight (20–120). Heavy Slam and Heat Crash compute their power from the attacker/target weight ratio (40–120).',
+          'Gyro Ball is now included. Its power is calculated from the speed ratio (min(150, 25 × target Speed ÷ attacker Speed)), making it strongest on slow Pokémon against fast targets.',
+          'Two-turn moves (Dig, Fly, Dive, Bounce, Shadow Force, Phantom Force, Skull Bash, Sky Drop, Freeze Shock) are now correctly excluded — they cannot OHKO in a single action.',
+          'Solar Beam and Solar Blade now only appear in results when Sun is active, since they require a charge turn in any other weather.',
+          'Electro Shot now only appears when Rain is active, since it charges on turn one in all other conditions.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.16.0',
     date: 'May 2026',
     title: 'Multi-Hit Moves, Sturdy & Protean',

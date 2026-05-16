@@ -450,6 +450,7 @@ function makePokemon(
     typeIds,
     stats: { hp, atk, def, spa: atk, spd: def, spe: 80 },
     abilities,
+    weight: 50,
   };
 }
 
