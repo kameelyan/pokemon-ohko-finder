@@ -760,31 +760,39 @@ export function findPokemonOHKOs(
 
         // ── Neutral nature ────────────────────────────────────────────────────
         // Preference order:
-        //  1. Works without weather → use no-weather result (weather never required)
-        //  2. Only works with weather → use with-weather result (weather required)
-        //  3. Nothing works → skip
+        //  • Weather inactive → use no-weather result.
+        //  • Weather active   → ALWAYS use the with-weather result so defensive boosts
+        //    (Snow ×1.5 Ice Def, Sand ×1.5 Rock SpDef) and offensive changes are all
+        //    reflected in the displayed damage numbers.
+        //    - weatherRequired is set only when the OHKO wouldn't work without weather.
+        //    - If withWeatherBest is null the move can no longer OHKO under active weather
+        //      (e.g. Snow pushes the defender's Def too high) → skip it entirely.
 
-        const noWeatherBest  = findBest(noWeatherConfigs, 'none', ts);
+        const noWeatherBest   = findBest(noWeatherConfigs, 'none', ts);
         const withWeatherBest = weather !== 'none' ? findBest(withWeatherConfigs, weather, ts) : null;
 
         let chosen: OHKOAttempt | null = null;
         let abilityRequired: OHKOMoveInfo['abilityMod'];
         let weatherRequired: OHKOMoveInfo['weatherRequired'];
 
-        if (noWeatherBest) {
-          const useWeather = withWeatherBest &&
-            withWeatherBest.attempt.evNeeded < noWeatherBest.attempt.evNeeded;
-          chosen = useWeather ? withWeatherBest.attempt : noWeatherBest.attempt;
-          const src = useWeather ? withWeatherBest : noWeatherBest;
-          abilityRequired = src.ability
-            ? { identifier: src.ability.identifier, name: src.ability.name, isHidden: src.ability.isHidden }
-            : undefined;
-        } else if (withWeatherBest) {
-          chosen = withWeatherBest.attempt;
-          abilityRequired = withWeatherBest.ability
-            ? { identifier: withWeatherBest.ability.identifier, name: withWeatherBest.ability.name, isHidden: withWeatherBest.ability.isHidden }
-            : undefined;
-          weatherRequired = weather as Exclude<Weather, 'none'>;
+        if (weather !== 'none') {
+          // Active weather: display numbers that reflect the current conditions.
+          if (withWeatherBest) {
+            chosen = withWeatherBest.attempt;
+            abilityRequired = withWeatherBest.ability
+              ? { identifier: withWeatherBest.ability.identifier, name: withWeatherBest.ability.name, isHidden: withWeatherBest.ability.isHidden }
+              : undefined;
+            // Only flag weather as required if the move wouldn't OHKO without it.
+            weatherRequired = noWeatherBest ? undefined : weather as Exclude<Weather, 'none'>;
+          }
+          // else: withWeatherBest null → weather prevents the OHKO → skip (chosen stays null).
+        } else {
+          if (noWeatherBest) {
+            chosen = noWeatherBest.attempt;
+            abilityRequired = noWeatherBest.ability
+              ? { identifier: noWeatherBest.ability.identifier, name: noWeatherBest.ability.name, isHidden: noWeatherBest.ability.isHidden }
+              : undefined;
+          }
         }
 
         if (chosen) {
@@ -826,19 +834,19 @@ export function findPokemonOHKOs(
           let natureAbility: OHKOMoveInfo['abilityMod'];
           let natureWeather: OHKOMoveInfo['weatherRequired'];
 
-          if (nwNature) {
-            const useWeather = wwNature && wwNature.attempt.evNeeded < nwNature.attempt.evNeeded;
-            natureChosen = useWeather ? wwNature.attempt : nwNature.attempt;
-            const src = useWeather ? wwNature : nwNature;
-            natureAbility = src.ability
-              ? { identifier: src.ability.identifier, name: src.ability.name, isHidden: src.ability.isHidden }
+          if (weather !== 'none') {
+            if (wwNature) {
+              natureChosen = wwNature.attempt;
+              natureAbility = wwNature.ability
+                ? { identifier: wwNature.ability.identifier, name: wwNature.ability.name, isHidden: wwNature.ability.isHidden }
+                : undefined;
+              natureWeather = nwNature ? undefined : weather as Exclude<Weather, 'none'>;
+            }
+          } else if (nwNature) {
+            natureChosen = nwNature.attempt;
+            natureAbility = nwNature.ability
+              ? { identifier: nwNature.ability.identifier, name: nwNature.ability.name, isHidden: nwNature.ability.isHidden }
               : undefined;
-          } else if (wwNature) {
-            natureChosen = wwNature.attempt;
-            natureAbility = wwNature.ability
-              ? { identifier: wwNature.ability.identifier, name: wwNature.ability.name, isHidden: wwNature.ability.isHidden }
-              : undefined;
-            natureWeather = weather as Exclude<Weather, 'none'>;
           }
 
           // Only show a nature-variant row when it achieves a strictly lower EV threshold

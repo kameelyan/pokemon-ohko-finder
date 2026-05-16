@@ -208,6 +208,59 @@ describe('getWeatherDefMult', () => {
   });
 });
 
+// ─── damageSingle reflects weather defensive boost ───────────────────────────
+// Regression test: previously the result-selection logic in findPokemonOHKOs
+// would display no-weather damage numbers even when weather was active, because
+// it preferred whichever calc gave a lower EV requirement rather than always
+// using the active-weather calc. Snow + Ice-type target was the reported case.
+
+describe('getWeatherDefMult effect on damageSingle (regression)', () => {
+  it('physical damage vs Ice type is lower in Snow than without weather', () => {
+    const defBase = 100;
+    const snowMult = getWeatherDefMult('snow', true, false, [15]); // Ice type, physical
+    expect(snowMult).toBe(1.5);
+
+    const noSnow = damageSingle(100, 150, defBase,          1.0, 100);
+    const inSnow = damageSingle(100, 150, Math.floor(defBase * snowMult), 1.0, 100);
+
+    expect(inSnow.max).toBeLessThan(noSnow.max);
+    expect(inSnow.min).toBeLessThan(noSnow.min);
+  });
+
+  it('special damage vs Ice type is unchanged in Snow (Snow only boosts Def, not SpDef)', () => {
+    const defBase = 100;
+    const snowMult = getWeatherDefMult('snow', false, false, [15]); // Ice type, special
+    expect(snowMult).toBe(1.0); // no boost
+
+    const noSnow = damageSingle(100, 150, defBase, 1.0, 100);
+    const inSnow = damageSingle(100, 150, Math.floor(defBase * snowMult), 1.0, 100);
+
+    expect(inSnow.max).toBe(noSnow.max);
+  });
+
+  it('physical damage vs non-Ice type is unchanged in Snow', () => {
+    const defBase = 100;
+    const snowMult = getWeatherDefMult('snow', true, false, [10]); // Fire type, physical
+    expect(snowMult).toBe(1.0); // no boost
+
+    const noSnow = damageSingle(100, 150, defBase, 1.0, 100);
+    const inSnow = damageSingle(100, 150, Math.floor(defBase * snowMult), 1.0, 100);
+
+    expect(inSnow.max).toBe(noSnow.max);
+  });
+
+  it('special damage vs Rock type is lower in Sand (Sand boosts SpDef)', () => {
+    const defBase = 100;
+    const sandMult = getWeatherDefMult('sand', false, false, [6]); // Rock type, special
+    expect(sandMult).toBe(1.5);
+
+    const noSand = damageSingle(100, 150, defBase,          1.0, 100);
+    const inSand = damageSingle(100, 150, Math.floor(defBase * sandMult), 1.0, 100);
+
+    expect(inSand.max).toBeLessThan(noSand.max);
+  });
+});
+
 // ─── Terrain multipliers ─────────────────────────────────────────────────────
 
 describe('getTerrainMult', () => {
