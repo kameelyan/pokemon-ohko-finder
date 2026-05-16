@@ -106,6 +106,7 @@ interface Props {
   onChoiceItemChange: (v: 'band' | 'scarf' | 'specs' | null) => void;
   isDoubles: boolean;
   statMode: 'ev' | 'sp';
+  hasTargets: boolean;
 }
 
 /** Full base-stat grid shown in the Pokémon header tooltip */
@@ -243,7 +244,7 @@ function minSpeedEVs(baseSpe: number, targetSpeed: number, natureMult: number, a
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export default function PokemonResultsView({ title, results, targetNames, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, gravity, onGravityChange, terrain, onTerrainChange, fairyAura, onFairyAuraChange, atkStage, onAtkStageChange, spaStage, onSpaStageChange, atkDefStage, onAtkDefStageChange, atkSpeStage, onAtkSpeStageChange, choiceItem, onChoiceItemChange, isDoubles, statMode }: Props) {
+export default function PokemonResultsView({ title, results, targetNames, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, gravity, onGravityChange, terrain, onTerrainChange, fairyAura, onFairyAuraChange, atkStage, onAtkStageChange, spaStage, onSpaStageChange, atkDefStage, onAtkDefStageChange, atkSpeStage, onAtkSpeStageChange, choiceItem, onChoiceItemChange, isDoubles, statMode, hasTargets }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -381,19 +382,6 @@ export default function PokemonResultsView({ title, results, targetNames, target
       next.has(tid) ? next.delete(tid) : next.add(tid);
       return { ...prev, types: next };
     });
-
-  if (results.length === 0) {
-    return (
-      <div style={{ textAlign: 'center', color: '#888', marginTop: '32px', fontSize: '16px' }}>
-        No{showPossible ? '' : ' guaranteed'} OHKOs found with current settings.
-        {!showPossible && (
-          <div style={{ marginTop: '8px', fontSize: '14px' }}>
-            Try enabling "Show possible OHKOs" to see lucky-roll results.
-          </div>
-        )}
-      </div>
-    );
-  }
 
   const guaranteed = sortedResults.filter(r => r.allGuaranteed);
   const possible = sortedResults.filter(r => !r.allGuaranteed);
@@ -746,14 +734,30 @@ export default function PokemonResultsView({ title, results, targetNames, target
       </div>{/* end sticky wrapper */}
 
       {/* ── Results list ── */}
-      {sortedResults.length === 0 && activeFilterCount > 0 && (
+      {!hasTargets && (
+        <div style={{ textAlign: 'center', color: '#aaa', padding: '48px 32px', fontSize: '15px' }}>
+          <div style={{ fontSize: '56px', marginBottom: '12px' }}>🔍</div>
+          Search for a Pokémon above to find what can OHKO it
+        </div>
+      )}
+      {hasTargets && sortedResults.length === 0 && activeFilterCount > 0 && (
         <div style={{ textAlign: 'center', color: '#aaa', padding: '32px', fontSize: '15px' }}>
           No results match the current filters.
         </div>
       )}
+      {hasTargets && results.length === 0 && activeFilterCount === 0 && (
+        <div style={{ textAlign: 'center', color: '#888', padding: '32px', fontSize: '16px' }}>
+          No{showPossible ? '' : ' guaranteed'} OHKOs found with current settings.
+          {!showPossible && (
+            <div style={{ marginTop: '8px', fontSize: '14px' }}>
+              Try enabling "Show possible OHKOs" to see lucky-roll results.
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }} data-tour="results-list">
-        {sortedResults.map(result => {
+        {sortedResults.map((result, resultIdx) => {
           const { pokemon, movesPerTarget, allGuaranteed } = result;
           const isMega = pokemon.identifier.includes('-mega');
           const isExpanded = expandedIds.has(pokemon.id);
@@ -778,6 +782,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
           return (
             <div
               key={pokemon.id}
+              data-tour={resultIdx === 0 ? 'first-result-row' : undefined}
               style={{
                 border: `1px solid ${allGuaranteed ? '#c6f6d5' : '#fef3c7'}`,
                 borderRadius: '10px',

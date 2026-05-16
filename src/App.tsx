@@ -275,7 +275,7 @@ const TOUR_STEPS: TourStep[] = [
         </p>
       </div>
     ),
-    target: '[data-tour="results-list"]',
+    target: '[data-tour="first-result-row"]',
     placement: 'top',
   },
 ];
@@ -502,16 +502,17 @@ export default function App() {
                 onClick={() => setTourActive(true)}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  background: 'rgba(255,255,255,0.15)',
-                  color: '#fff',
+                  background: '#fff',
+                  color: '#c53030',
                   fontSize: '12px', fontWeight: 700,
                   padding: '5px 12px', borderRadius: '6px',
-                  border: '1px solid rgba(255,255,255,0.3)',
+                  border: 'none',
                   cursor: 'pointer', whiteSpace: 'nowrap',
-                  transition: 'background 0.15s',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                  transition: 'opacity 0.15s',
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.25)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
                 data-tour="how-to-use-btn"
               >
                 ❓ How to use
@@ -908,59 +909,49 @@ export default function App() {
 
             </div>
 
-            {/* Results */}
-            {activeTargets.length > 0 && (
-              <div
-                data-tour="results"
-                style={{
-                  background: '#fff', borderRadius: '12px', padding: '24px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
-                }}>
-                <PokemonResultsView
-                  title={computing ? '⏳ Computing…' : resultLabel}
-                  results={results}
-                  targetNames={filledNames}
-                  targetSpeeds={targetSpeeds}
-                  mustOutspeedSpeeds={mustOutspeedSpeeds}
-                  targetsMustOutspeed={slots.filter(s => s.pokemon !== null).map(s => s.mustOutspeed)}
-                  championsOnly={championsOnly}
-                  data={data!}
-                  showPossible={showPossible}
-                  onShowPossibleChange={setShowPossible}
-                  minAccuracy={minAccuracy}
-                  onMinAccuracyChange={setMinAccuracy}
-                  weather={weather}
-                  onWeatherChange={setWeather}
-                  gravity={gravity}
-                  onGravityChange={setGravity}
-                  terrain={terrain}
-                  onTerrainChange={setTerrain}
-                  fairyAura={fairyAura}
-                  onFairyAuraChange={setFairyAura}
-                  atkStage={atkStage}
-                  onAtkStageChange={setAtkStage}
-                  spaStage={spaStage}
-                  onSpaStageChange={setSpaStage}
-                  atkDefStage={atkDefStage}
-                  onAtkDefStageChange={setAtkDefStage}
-                  atkSpeStage={atkSpeStage}
-                  onAtkSpeStageChange={setAtkSpeStage}
-                  choiceItem={choiceItem}
-                  onChoiceItemChange={setChoiceItem}
-                  isDoubles={isDoubles}
-                  statMode={statMode}
-                />
-              </div>
-            )}
-
-            {activeTargets.length === 0 && (
-              <div style={{ textAlign: 'center', marginTop: '60px', color: '#aaa' }}>
-                <div style={{ fontSize: '64px' }}>🔍</div>
-                <p style={{ fontSize: '18px', marginTop: '12px' }}>
-                  Search for a Pokémon above to find what can OHKO it
-                </p>
-              </div>
-            )}
+            {/* Results — always visible so filters/search/sort are always accessible */}
+            <div
+              data-tour="results"
+              style={{
+                background: '#fff', borderRadius: '12px', padding: '24px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
+              }}>
+              <PokemonResultsView
+                title={computing ? '⏳ Computing…' : resultLabel}
+                results={results}
+                targetNames={filledNames}
+                targetSpeeds={targetSpeeds}
+                mustOutspeedSpeeds={mustOutspeedSpeeds}
+                targetsMustOutspeed={slots.filter(s => s.pokemon !== null).map(s => s.mustOutspeed)}
+                championsOnly={championsOnly}
+                data={data!}
+                showPossible={showPossible}
+                onShowPossibleChange={setShowPossible}
+                minAccuracy={minAccuracy}
+                onMinAccuracyChange={setMinAccuracy}
+                weather={weather}
+                onWeatherChange={setWeather}
+                gravity={gravity}
+                onGravityChange={setGravity}
+                terrain={terrain}
+                onTerrainChange={setTerrain}
+                fairyAura={fairyAura}
+                onFairyAuraChange={setFairyAura}
+                atkStage={atkStage}
+                onAtkStageChange={setAtkStage}
+                spaStage={spaStage}
+                onSpaStageChange={setSpaStage}
+                atkDefStage={atkDefStage}
+                onAtkDefStageChange={setAtkDefStage}
+                atkSpeStage={atkSpeStage}
+                onAtkSpeStageChange={setAtkSpeStage}
+                choiceItem={choiceItem}
+                onChoiceItemChange={setChoiceItem}
+                isDoubles={isDoubles}
+                statMode={statMode}
+                hasTargets={activeTargets.length > 0}
+              />
+            </div>
           </>
         )}
       </main>
