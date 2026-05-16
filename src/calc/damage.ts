@@ -855,12 +855,10 @@ export function findPokemonOHKOs(
     }
 
     for (let i = 0; i < movesPerTarget.length; i++) {
-      movesPerTarget[i].sort((a, b) => {
-        if (a.isGuaranteed !== b.isGuaranteed) return a.isGuaranteed ? -1 : 1;
-        return b.maxDamage - a.maxDamage;
-      });
+      // Primary sort: alphabetical by move name.
+      movesPerTarget[i].sort((a, b) => a.move.name.localeCompare(b.move.name));
       // Re-group by move ID so all variants of the same move stay adjacent.
-      // The group's position in the list is set by its best-sorting variant.
+      // The group's position in the list is set by its first appearance (alphabetical order).
       const grouped = new Map<number, OHKOMoveInfo[]>();
       const order: number[] = [];
       for (const m of movesPerTarget[i]) {
