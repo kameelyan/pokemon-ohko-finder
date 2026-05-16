@@ -215,6 +215,12 @@ interface AbilityMod {
   typeOverride: number | null;
   stabMult: number | null; // null = default 1.5
   accMult: number;
+  /**
+   * When true the attacker always receives STAB on this move regardless of its own typing.
+   * Used by Protean / Libero: the Pokémon changes to the move's type before attacking,
+   * guaranteeing the ×1.5 bonus on every move it uses.
+   */
+  forceStab?: boolean;
 }
 
 /**
@@ -233,6 +239,7 @@ function getAbilityMod(
     typeOverride: opts.typeOverride ?? null,
     stabMult: opts.stabMult ?? null,
     accMult: opts.accMult ?? 1.0,
+    forceStab: opts.forceStab,
   });
 
   switch (abilityIdentifier) {
@@ -256,6 +263,16 @@ function getAbilityMod(
     // ── STAB multiplier override ───────────────────────────────────────────
     case 'adaptability':
       return attackerTypeIds.includes(move.typeId) ? mod(1.0, { stabMult: 2.0 }) : null;
+
+    // ── Always-STAB abilities ──────────────────────────────────────────────
+    // Protean (Greninja, Kecleon, …) and Libero (Cinderace) change the user's
+    // type to match the move before it hits — the user always gets STAB.
+    // In Gen 9 this only activates once per battle, but we model each OHKO
+    // attempt as the first move used, so it always applies here.
+    case 'protean':
+    case 'libero':
+      // Only grant the bonus if the move wouldn't already be STAB (avoids double-counting).
+      return attackerTypeIds.includes(move.typeId) ? null : mod(1.0, { forceStab: true });
 
     // ── Type-converting abilities (Normal → X, ×1.2) ──────────────────────
     case 'pixilate':    return move.typeId === 1 ? mod(1.2, { typeOverride: 18 }) : null;
@@ -637,7 +654,10 @@ function tryOHKO(
 
   const atkTotalMult = atkStageMult * choiceItemMult * natureMult;
 
-  const stab = attackerTypeIds.includes(effectiveTypeId);
+  // Protean / Libero force STAB on every move (abilityMod.forceStab).
+  // Type-converting abilities (Pixilate etc.) change effectiveTypeId, so the standard
+  // attackerTypeIds check handles those — forceStab is only needed for Protean/Libero.
+  const stab = (abilityMod?.forceStab ?? false) || attackerTypeIds.includes(effectiveTypeId);
   const stabFactor = stab ? (abilityMod?.stabMult ?? 1.5) : 1.0;
 
   // Weather multiplies the effective power (after ability)

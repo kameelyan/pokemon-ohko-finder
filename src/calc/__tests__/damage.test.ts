@@ -701,3 +701,91 @@ describe('findPokemonOHKOs — Parental Bond bypasses Sturdy', () => {
     expect(results.length).toBe(0);
   });
 });
+
+// ─── Protean / Libero ─────────────────────────────────────────────────────────
+// Protean and Libero change the user's type to match the move before it hits,
+// granting STAB (×1.5) on every move regardless of the attacker's actual types.
+//
+// Fixture math (verified):
+//   Attacker base Atk 103 (Greninja-like), Water move power 80, Normal-type target.
+//   Target: base HP 50 → 125 HP, base Def 30 → 50 Def.
+//
+//   With Protean (STAB 1.5×):
+//     252 EVs → max 166, min 141  — both ≥ 125  → GUARANTEED OHKO ✓
+//   Without Protean (no STAB 1.0×):
+//     252 EVs → max 111            — 111 < 125  → CANNOT OHKO at any EV ✓
+//
+// The gap is unambiguous: Protean is the sole differentiator.
+
+describe('findPokemonOHKOs — Protean / Libero always grant STAB', () => {
+  const WATER_TYPE  = 11;
+  // Water move on a Normal-type attacker — no natural STAB
+  const waterMove = makeMove(601, 80, WATER_TYPE);
+
+  // Soft target: base HP 50 (→125 HP), base Def 30 (→50 Def) — chosen so
+  // Protean unlocks a guaranteed OHKO that is impossible without it.
+  const softTarget = makeTarget(makePokemon(TARGET_ID, 50, 30, 50, [NORMAL_TYPE]));
+
+  it('without Protean: cannot OHKO even at 252 EVs (max damage 111 < 125 HP)', () => {
+    const noAbility = makePokemon(ATTACKER_ID, 103, 80, 100, [NORMAL_TYPE]);
+    const data = makeData(noAbility, NORMAL_TYPE, [waterMove]);
+    const results = findPokemonOHKOs([softTarget], data);
+    // No STAB → move can never OHKO the target regardless of EV investment
+    expect(results.length).toBe(0);
+  });
+
+  it('Protean grants STAB and enables the OHKO (guaranteed at 252 EVs)', () => {
+    const proteanAttacker = makePokemon(ATTACKER_ID, 103, 80, 100, [NORMAL_TYPE], [
+      makeAbility('protean', 'Protean'),
+    ]);
+    const data    = makeData(proteanAttacker, NORMAL_TYPE, [waterMove]);
+    const results = findPokemonOHKOs([softTarget], data);
+    expect(results.length).toBeGreaterThan(0);
+  });
+
+  it('Protean result has abilityMod set to "protean"', () => {
+    const proteanAttacker = makePokemon(ATTACKER_ID, 103, 80, 100, [NORMAL_TYPE], [
+      makeAbility('protean', 'Protean'),
+    ]);
+    const data    = makeData(proteanAttacker, NORMAL_TYPE, [waterMove]);
+    const results = findPokemonOHKOs([softTarget], data);
+    const info = results[0].movesPerTarget[0][0];
+    expect(info.abilityMod?.identifier).toBe('protean');
+  });
+
+  it('Protean does NOT double-count STAB when the attacker already has the move type', () => {
+    // Water-type attacker using a Water move already has STAB — Protean should return null
+    // (the getAbilityMod guard: `attackerTypeIds.includes(move.typeId) ? null : mod(...)`)
+    // so the result should be identical to no-ability.
+    const waterNoAbility = makePokemon(ATTACKER_ID, 103, 80, 100, [WATER_TYPE]);
+    const waterProtean   = makePokemon(ATTACKER_ID, 103, 80, 100, [WATER_TYPE], [
+      makeAbility('protean', 'Protean'),
+    ]);
+    const dataNoAbility = makeData(waterNoAbility, NORMAL_TYPE, [makeMove(602, 80, WATER_TYPE)]);
+    const dataProtean   = makeData(waterProtean,   NORMAL_TYPE, [makeMove(602, 80, WATER_TYPE)]);
+
+    const resNoAbility = findPokemonOHKOs([softTarget], dataNoAbility);
+    const resProtean   = findPokemonOHKOs([softTarget], dataProtean);
+
+    // Both can OHKO (Water attacker has natural STAB). EVs must be equal — no double bonus.
+    expect(resNoAbility.length).toBe(resProtean.length);
+    if (resNoAbility.length > 0 && resProtean.length > 0) {
+      expect(resProtean[0].movesPerTarget[0][0].evNeeded)
+        .toBe(resNoAbility[0].movesPerTarget[0][0].evNeeded);
+    }
+  });
+
+  it('Libero grants exactly the same bonus as Protean', () => {
+    const libero  = makePokemon(ATTACKER_ID, 103, 80, 100, [NORMAL_TYPE], [makeAbility('libero',  'Libero')]);
+    const protean = makePokemon(ATTACKER_ID, 103, 80, 100, [NORMAL_TYPE], [makeAbility('protean', 'Protean')]);
+
+    const resLibero  = findPokemonOHKOs([softTarget], makeData(libero,  NORMAL_TYPE, [waterMove]));
+    const resProtean = findPokemonOHKOs([softTarget], makeData(protean, NORMAL_TYPE, [waterMove]));
+
+    expect(resLibero.length).toBe(resProtean.length);
+    if (resLibero.length > 0 && resProtean.length > 0) {
+      expect(resLibero[0].movesPerTarget[0][0].evNeeded)
+        .toBe(resProtean[0].movesPerTarget[0][0].evNeeded);
+    }
+  });
+});
