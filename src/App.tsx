@@ -310,6 +310,7 @@ export default function App() {
     return saved === 'sp' ? 'sp' : 'ev';
   });
   const [tourActive, setTourActive] = useState(false);
+  const [trickRoom, setTrickRoom] = useState(false);
 
   useEffect(() => {
     loadGameData()
@@ -449,9 +450,9 @@ export default function App() {
     if (!data || activeTargets.length === 0) { setResults([]); return; }
     setComputing(true);
     setTimeout(() => {
-      const atkItemMult = choiceItem === 'band'  ? 1.5 : 1.0;
-      const spaItemMult = choiceItem === 'specs' ? 1.5 : 1.0;
-      const evStep       = statMode === 'sp' ? 8 : 4;
+      const atkItemMult   = choiceItem === 'band'  ? 1.5 : 1.0;
+      const spaItemMult   = choiceItem === 'specs' ? 1.5 : 1.0;
+      const evStep        = statMode === 'sp' ? 8 : 4;
       const maxAttackerEV = statMode === 'sp' ? 256 : 252;
       setResults(findPokemonOHKOs(activeTargets, data, showPossible, minAccuracy, weather, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, evStep, maxAttackerEV));
       setComputing(false);
@@ -933,6 +934,8 @@ export default function App() {
                 onWeatherChange={setWeather}
                 gravity={gravity}
                 onGravityChange={setGravity}
+                trickRoom={trickRoom}
+                onTrickRoomChange={setTrickRoom}
                 terrain={terrain}
                 onTerrainChange={setTerrain}
                 fairyAura={fairyAura}

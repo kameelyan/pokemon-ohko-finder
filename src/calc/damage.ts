@@ -265,6 +265,8 @@ export interface OHKOMoveInfo {
   foulPlayAtk?: number;
   /** For Round only: true when the base-power OHKO fails but the doubled power (×2) achieves it. */
   needsRoundBoost?: boolean;
+  /** Attacker nature required for this OHKO — absent means neutral nature suffices. */
+  nature?: '+atk' | '+spa';
   coveredTargetIndices: number[];
 }
 
@@ -463,6 +465,8 @@ function tryOHKO(
   atkDefStage: number,
   atkItemMult = 1.0,
   spaItemMult = 1.0,
+  atkNatureMult = 1.0,
+  spaNatureMult = 1.0,
   evStep = 4,
   maxAttackerEV = 252,
 ): OHKOAttempt | null {
@@ -527,7 +531,13 @@ function tryOHKO(
     ? atkItemMult
     : (!isPhysical ? spaItemMult : 1.0);
 
-  const atkTotalMult = atkStageMult * choiceItemMult;
+  // Nature multiplier: +10% to physical (Adamant-like) or special (Modest-like) moves.
+  // Foul Play uses target's Atk; Body Press uses attacker's Def — neither benefits from an offensive nature.
+  const natureMult = (isPhysical && move.id !== FOUL_PLAY_MOVE_ID && move.id !== BODY_PRESS_MOVE_ID)
+    ? atkNatureMult
+    : (!isPhysical ? spaNatureMult : 1.0);
+
+  const atkTotalMult = atkStageMult * choiceItemMult * natureMult;
 
   const stab = attackerTypeIds.includes(effectiveTypeId);
   const stabFactor = stab ? (abilityMod?.stabMult ?? 1.5) : 1.0;
@@ -676,11 +686,12 @@ export function findPokemonOHKOs(
         return configs;
       };
 
-      // Find best attempt across a set of configs under a given weather
-      const findBest = (configs: AbilityConfig[], w: Weather, ts: TargetStats) => {
+      // Find best attempt across a set of configs under a given weather.
+      // atkNM / spaNM are the attacker nature multipliers (1.0 = neutral).
+      const findBest = (configs: AbilityConfig[], w: Weather, ts: TargetStats, atkNM = 1.0, spaNM = 1.0) => {
         let best: { attempt: OHKOAttempt; ability: typeof attacker.abilities[0] | null } | null = null;
         for (const { mod, ability } of configs) {
-          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, evStep, maxAttackerEV);
+          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, atkNM, spaNM, evStep, maxAttackerEV);
           if (attempt && (!best || attempt.evNeeded < best.attempt.evNeeded)) {
             best = { attempt, ability };
           }
@@ -694,21 +705,20 @@ export function findPokemonOHKOs(
       for (let ti = 0; ti < targetStats.length; ti++) {
         const ts = targetStats[ti];
 
-        const noWeatherBest  = findBest(noWeatherConfigs, 'none', ts);
-        const withWeatherBest = weather !== 'none' ? findBest(withWeatherConfigs, weather, ts) : null;
-
+        // ── Neutral nature ────────────────────────────────────────────────────
         // Preference order:
         //  1. Works without weather → use no-weather result (weather never required)
         //  2. Only works with weather → use with-weather result (weather required)
         //  3. Nothing works → skip
+
+        const noWeatherBest  = findBest(noWeatherConfigs, 'none', ts);
+        const withWeatherBest = weather !== 'none' ? findBest(withWeatherConfigs, weather, ts) : null;
 
         let chosen: OHKOAttempt | null = null;
         let abilityRequired: OHKOMoveInfo['abilityMod'];
         let weatherRequired: OHKOMoveInfo['weatherRequired'];
 
         if (noWeatherBest) {
-          // Achievable without weather — prefer this for displayed numbers if it has fewer/equal EVs
-          // but if weather gives strictly fewer EVs, still use weather numbers (more accurate for current conditions)
           const useWeather = withWeatherBest &&
             withWeatherBest.attempt.evNeeded < noWeatherBest.attempt.evNeeded;
           chosen = useWeather ? withWeatherBest!.attempt : noWeatherBest.attempt;
@@ -716,9 +726,7 @@ export function findPokemonOHKOs(
           abilityRequired = src.ability
             ? { identifier: src.ability.identifier, name: src.ability.name, isHidden: src.ability.isHidden }
             : undefined;
-          // weather was NOT required (works without it)
         } else if (withWeatherBest) {
-          // Only achievable with weather
           chosen = withWeatherBest.attempt;
           abilityRequired = withWeatherBest.ability
             ? { identifier: withWeatherBest.ability.identifier, name: withWeatherBest.ability.name, isHidden: withWeatherBest.ability.isHidden }
@@ -726,42 +734,101 @@ export function findPokemonOHKOs(
           weatherRequired = weather as Exclude<Weather, 'none'>;
         }
 
-        if (!chosen) continue;
+        if (chosen) {
+          movesPerTarget[ti].push({
+            move,
+            minDamage: chosen.minDmg,
+            maxDamage: chosen.maxDmg,
+            targetHP: ts.hp,
+            isGuaranteed: chosen.minDmg >= ts.hp,
+            typeEffectiveness: chosen.effFactor / 100,
+            stab: chosen.stab,
+            accuracy: chosen.adjAccuracy,
+            evNeeded: chosen.evNeeded,
+            item: chosen.item,
+            abilityMod: abilityRequired,
+            defAbility: chosen.defAbility,
+            baseEvNeeded: chosen.baseEvNeeded,
+            weatherRequired,
+            foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
+            needsRoundBoost: chosen.needsRoundBoost,
+            coveredTargetIndices: [],
+          });
+        }
 
-        movesPerTarget[ti].push({
-          move,
-          minDamage: chosen.minDmg,
-          maxDamage: chosen.maxDmg,
-          targetHP: ts.hp,
-          isGuaranteed: chosen.minDmg >= ts.hp,
-          typeEffectiveness: chosen.effFactor / 100,
-          stab: chosen.stab,
-          accuracy: chosen.adjAccuracy,
-          evNeeded: chosen.evNeeded,
-          item: chosen.item,
-          abilityMod: abilityRequired,
-          defAbility: chosen.defAbility,
-          baseEvNeeded: chosen.baseEvNeeded,
-          weatherRequired,
-          foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
-          needsRoundBoost: chosen.needsRoundBoost,
-          coveredTargetIndices: [],
-        });
+        // ── Nature variant (+Atk or +SpA) ────────────────────────────────────
+        // Foul Play and Body Press don't benefit from offensive natures.
+        const natureLabel: '+atk' | '+spa' | null =
+          (isPhysical && move.id !== FOUL_PLAY_MOVE_ID && move.id !== BODY_PRESS_MOVE_ID) ? '+atk'
+          : !isPhysical ? '+spa'
+          : null;
+
+        if (natureLabel !== null) {
+          const [atkNM, spaNM] = natureLabel === '+atk' ? [1.1, 1.0] : [1.0, 1.1];
+          const nwNature = findBest(noWeatherConfigs, 'none', ts, atkNM, spaNM);
+          const wwNature = weather !== 'none' ? findBest(withWeatherConfigs, weather, ts, atkNM, spaNM) : null;
+
+          let natureChosen: OHKOAttempt | null = null;
+          let natureAbility: OHKOMoveInfo['abilityMod'];
+          let natureWeather: OHKOMoveInfo['weatherRequired'];
+
+          if (nwNature) {
+            const useWeather = wwNature && wwNature.attempt.evNeeded < nwNature.attempt.evNeeded;
+            natureChosen = useWeather ? wwNature!.attempt : nwNature.attempt;
+            const src = useWeather ? wwNature! : nwNature;
+            natureAbility = src.ability
+              ? { identifier: src.ability.identifier, name: src.ability.name, isHidden: src.ability.isHidden }
+              : undefined;
+          } else if (wwNature) {
+            natureChosen = wwNature.attempt;
+            natureAbility = wwNature.ability
+              ? { identifier: wwNature.ability.identifier, name: wwNature.ability.name, isHidden: wwNature.ability.isHidden }
+              : undefined;
+            natureWeather = weather as Exclude<Weather, 'none'>;
+          }
+
+          // Only show a nature-variant row when it achieves a strictly lower EV threshold
+          if (natureChosen && (!chosen || natureChosen.evNeeded < chosen.evNeeded)) {
+            movesPerTarget[ti].push({
+              move,
+              minDamage: natureChosen.minDmg,
+              maxDamage: natureChosen.maxDmg,
+              targetHP: ts.hp,
+              isGuaranteed: natureChosen.minDmg >= ts.hp,
+              typeEffectiveness: natureChosen.effFactor / 100,
+              stab: natureChosen.stab,
+              accuracy: natureChosen.adjAccuracy,
+              evNeeded: natureChosen.evNeeded,
+              item: natureChosen.item,
+              abilityMod: natureAbility,
+              defAbility: natureChosen.defAbility,
+              baseEvNeeded: natureChosen.baseEvNeeded,
+              weatherRequired: natureWeather,
+              foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
+              needsRoundBoost: natureChosen.needsRoundBoost,
+              nature: natureLabel,
+              coveredTargetIndices: [],
+            });
+          }
+        }
       }
     }
 
     if (!movesPerTarget.every(moves => moves.length > 0)) continue;
 
-    const moveTargetMap = new Map<number, number[]>();
+    // Key = "moveId:nature" so neutral and nature-variant rows track independently.
+    const moveTargetMap = new Map<string, number[]>();
     for (let ti = 0; ti < movesPerTarget.length; ti++) {
       for (const info of movesPerTarget[ti]) {
-        if (!moveTargetMap.has(info.move.id)) moveTargetMap.set(info.move.id, []);
-        moveTargetMap.get(info.move.id)!.push(ti);
+        const key = `${info.move.id}:${info.nature ?? ''}`;
+        if (!moveTargetMap.has(key)) moveTargetMap.set(key, []);
+        moveTargetMap.get(key)!.push(ti);
       }
     }
     for (const moves of movesPerTarget) {
       for (const info of moves) {
-        info.coveredTargetIndices = moveTargetMap.get(info.move.id)!;
+        const key = `${info.move.id}:${info.nature ?? ''}`;
+        info.coveredTargetIndices = moveTargetMap.get(key)!;
       }
     }
 
