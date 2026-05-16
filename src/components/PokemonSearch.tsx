@@ -83,7 +83,15 @@ export default function PokemonSearch({ pokemon, onSelect, placeholder = 'Search
                 width={30}
                 height={30}
                 style={{ imageRendering: 'pixelated', flexShrink: 0 }}
-                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                onError={e => {
+                  const img = e.target as HTMLImageElement;
+                  if (!img.dataset.fallback) {
+                    img.dataset.fallback = '1';
+                    img.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${p.id}.png`;
+                  } else {
+                    img.style.display = 'none';
+                  }
+                }}
               />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: '14px', lineHeight: 1.2 }}>{p.name}</div>

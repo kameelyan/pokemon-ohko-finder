@@ -803,7 +803,15 @@ export default function PokemonResultsView({ title, results, targetNames, target
                     alt={pokemon.name}
                     width={36} height={36}
                     style={{ imageRendering: 'pixelated', marginTop: '-2px' }}
-                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    onError={e => {
+                      const img = e.target as HTMLImageElement;
+                      if (!img.dataset.fallback) {
+                        img.dataset.fallback = '1';
+                        img.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${pokemon.id}.png`;
+                      } else {
+                        img.style.display = 'none';
+                      }
+                    }}
                   />
 
                   <Tooltip content={<StatTooltipContent pokemon={pokemon} />} maxWidth={220}>
