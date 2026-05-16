@@ -46,16 +46,28 @@ function CategoryIcon({ damageClassId }: { damageClassId: number }) {
   );
 }
 
+/** Emoji fallbacks for items whose sprites are missing from the PokeAPI sprites repo */
+const ITEM_EMOJI_FALLBACK: Record<string, string> = {
+  'fairy-feather': '🪶',
+};
+
 function ItemIcon({ identifier, name, boost, size = 16 }: { identifier: string; name: string; boost: number; size?: number }) {
   const [failed, setFailed] = useState(false);
   const src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${identifier}.png`;
   const pct = Math.round((boost - 1) * 100);
+  const emoji = ITEM_EMOJI_FALLBACK[identifier];
   if (failed) {
     return (
       <Tooltip content={`${name} (+${pct}%)`} side="bottom">
-        <span style={{ fontSize: '10px', color: '#b45309', fontWeight: 700, cursor: 'help' }}>
-          [{name}]
-        </span>
+        {emoji ? (
+          <span style={{ fontSize: size, lineHeight: 1, cursor: 'help', display: 'block' }} title={name}>
+            {emoji}
+          </span>
+        ) : (
+          <span style={{ fontSize: '10px', color: '#b45309', fontWeight: 700, cursor: 'help' }}>
+            [{name}]
+          </span>
+        )}
       </Tooltip>
     );
   }
@@ -1413,6 +1425,42 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                         borderRadius: '3px', padding: '1px 5px',
                       }}>
                         ♪ Double Power
+                      </span>
+                    </Tooltip>
+                  )}
+                  {/* Multi-hit: Sturdy-break chip */}
+                  {m.breaksSturdy && (
+                    <Tooltip
+                      content={`${m.move.name} hits at least twice. The first hit triggers Sturdy (target survives at 1 HP), and the second hit KOs — no EV investment needed. Damage shown is 2 hits total.`}
+                      side="bottom"
+                      maxWidth={280}
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#f0fff4', color: '#276749',
+                        border: '1px solid #68d391',
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        💥 Breaks Sturdy (2 hits)
+                      </span>
+                    </Tooltip>
+                  )}
+                  {/* Multi-hit: hits required chip (non-Sturdy) */}
+                  {m.hitsRequired !== undefined && !m.breaksSturdy && (
+                    <Tooltip
+                      content={`${m.move.name} hits multiple times. With these EVs, ${m.hitsRequired} hit${m.hitsRequired === 1 ? '' : 's'} are needed to KO the target. Damage shown is the total across all required hits.`}
+                      side="bottom"
+                      maxWidth={280}
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#e6fffa', color: '#234e52',
+                        border: '1px solid #81e6d9',
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        ✕{m.hitsRequired} hits
                       </span>
                     </Tooltip>
                   )}

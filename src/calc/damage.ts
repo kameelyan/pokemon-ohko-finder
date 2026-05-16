@@ -215,6 +215,12 @@ interface AbilityMod {
   typeOverride: number | null;
   stabMult: number | null; // null = default 1.5
   accMult: number;
+  /**
+   * When true the attacker always receives STAB on this move regardless of its own typing.
+   * Used by Protean / Libero: the Pokémon changes to the move's type before attacking,
+   * guaranteeing the ×1.5 bonus on every move it uses.
+   */
+  forceStab?: boolean;
 }
 
 /**
@@ -233,6 +239,7 @@ function getAbilityMod(
     typeOverride: opts.typeOverride ?? null,
     stabMult: opts.stabMult ?? null,
     accMult: opts.accMult ?? 1.0,
+    forceStab: opts.forceStab,
   });
 
   switch (abilityIdentifier) {
@@ -256,6 +263,16 @@ function getAbilityMod(
     // ── STAB multiplier override ───────────────────────────────────────────
     case 'adaptability':
       return attackerTypeIds.includes(move.typeId) ? mod(1.0, { stabMult: 2.0 }) : null;
+
+    // ── Always-STAB abilities ──────────────────────────────────────────────
+    // Protean (Greninja, Kecleon, …) and Libero (Cinderace) change the user's
+    // type to match the move before it hits — the user always gets STAB.
+    // In Gen 9 this only activates once per battle, but we model each OHKO
+    // attempt as the first move used, so it always applies here.
+    case 'protean':
+    case 'libero':
+      // Only grant the bonus if the move wouldn't already be STAB (avoids double-counting).
+      return attackerTypeIds.includes(move.typeId) ? null : mod(1.0, { forceStab: true });
 
     // ── Type-converting abilities (Normal → X, ×1.2) ──────────────────────
     case 'pixilate':    return move.typeId === 1 ? mod(1.2, { typeOverride: 18 }) : null;
@@ -306,6 +323,18 @@ export interface OHKOMoveInfo {
   needsGoingSecond?: boolean;
   /** Attacker nature required for this OHKO — absent means neutral nature suffices. */
   nature?: '+atk' | '+spa';
+  /**
+   * For multi-hit moves: the number of hits needed to KO the target with these EVs.
+   * Reflects worst-case RNG (minimum damage per hit) for guaranteed mode,
+   * and best-case RNG (maximum damage per hit) for possible mode.
+   */
+  hitsRequired?: number;
+  /**
+   * True when the KO is achieved because a multi-hit move (or Parental Bond) breaks
+   * Sturdy on the first hit, allowing subsequent hits to finish the target.
+   * Implies hitsRequired = 2 and the damage numbers shown are for 2 hits total.
+   */
+  breaksSturdy?: boolean;
   coveredTargetIndices: number[];
 }
 
@@ -437,6 +466,10 @@ interface OHKOAttempt {
   needsRoundBoost?: boolean;
   needsGoingSecond?: boolean;
   defAbility?: { identifier: string; name: string; mult: number };
+  /** For multi-hit moves: how many hits were needed to KO (already factored into minDmg/maxDmg). */
+  hitsRequired?: number;
+  /** True when the KO bypasses Sturdy via multi-hit first-hit + subsequent-hit mechanic. */
+  breaksSturdy?: boolean;
 }
 
 /**
@@ -487,6 +520,18 @@ function applyTargetAbility(
   }
 }
 
+/**
+ * Identifiers for abilities that bypass Sturdy (like Mold Breaker).
+ * Teravolt and Turboblaze are functionally equivalent to Mold Breaker.
+ */
+const STURDY_BYPASS_ABILITIES = new Set(['mold-breaker', 'teravolt', 'turboblaze']);
+
+/**
+ * Parental Bond — only available on Mega Kangaskhan (Pokémon ID 10039).
+ * Makes every move hit twice (100% + 25%), effectively breaking Sturdy on the first hit.
+ */
+const PARENTAL_BOND_POKEMON_ID = 10039;
+
 function tryOHKO(
   move: Move,
   atkBase: number,
@@ -510,6 +555,10 @@ function tryOHKO(
   spaNatureMult = 1.0,
   evStep = 4,
   maxAttackerEV = 252,
+  /** Whether the attacker has Mold Breaker, Teravolt, or Turboblaze (bypasses Sturdy). */
+  hasMoldBreaker = false,
+  /** Whether the attacker has Parental Bond (Mega Kangaskhan), which also bypasses Sturdy. */
+  hasParentalBond = false,
 ): OHKOAttempt | null {
   const effectiveTypeId = abilityMod?.typeOverride ?? move.typeId;
 
@@ -553,6 +602,23 @@ function tryOHKO(
     }
   }
 
+  // ── Sturdy check ──────────────────────────────────────────────────────────
+  // Sturdy prevents OHKOs from full HP unless one of the following is true:
+  //   1. Attacker has Mold Breaker / Teravolt / Turboblaze (hasMoldBreaker) → Sturdy ignored.
+  //   2. Move hits ≥ 2 times guaranteed (multiHit.min ≥ 2) → first hit breaks Sturdy (target at
+  //      1 HP), all subsequent hits land normally, so a 2-hit move always finishes the target.
+  //   3. Attacker has Parental Bond (hasParentalBond, Mega Kangaskhan only) → same as (2):
+  //      every move effectively hits twice.
+  const targetHasSturdy = ts.selectedAbilityIdentifier === 'sturdy';
+  const multiHitMin2    = (move.multiHit?.min ?? 1) >= 2;
+  // Does this interaction bypass Sturdy at all?
+  const stuardyBypass = hasMoldBreaker || multiHitMin2 || hasParentalBond;
+  if (targetHasSturdy && !stuardyBypass) return null;
+  // Is the bypass achieved via multi-hit / Parental Bond (not Mold Breaker)?
+  // If so we take a special early-return path — Mold Breaker bypasses silently, so for that
+  // case we fall through to the normal single-hit OHKO calc.
+  const usesMultiHitSturdyBreak = targetHasSturdy && !hasMoldBreaker && (multiHitMin2 || hasParentalBond);
+
   const rawDef = (isPhysical || isPsyshock) ? ts.def : ts.spd;
   const targetStageMult = (isPhysical || isPsyshock) ? stageMult(ts.defStage) : stageMult(ts.spdStage);
   const statMult = (isPhysical || isPsyshock) ? ts.defMult : ts.spdMult;
@@ -588,7 +654,10 @@ function tryOHKO(
 
   const atkTotalMult = atkStageMult * choiceItemMult * natureMult;
 
-  const stab = attackerTypeIds.includes(effectiveTypeId);
+  // Protean / Libero force STAB on every move (abilityMod.forceStab).
+  // Type-converting abilities (Pixilate etc.) change effectiveTypeId, so the standard
+  // attackerTypeIds check handles those — forceStab is only needed for Protean/Libero.
+  const stab = (abilityMod?.forceStab ?? false) || attackerTypeIds.includes(effectiveTypeId);
   const stabFactor = stab ? (abilityMod?.stabMult ?? 1.5) : 1.0;
 
   // Weather multiplies the effective power (after ability)
@@ -612,24 +681,53 @@ function tryOHKO(
   // Foul Play uses the target's Attack stat — the attacker invests no EVs
   const isFoulPlay = move.id === FOUL_PLAY_MOVE_ID;
 
+  // ── Sturdy-break via multi-hit fast path ──────────────────────────────────
+  // The first hit triggers Sturdy (target survives at 1 HP), and the second hit finishes
+  // the target — no EV investment is needed beyond dealing > 0 damage per hit.
+  // We show 2 × single-hit damage as the effective total to give the user a reference
+  // for how much damage Sturdy "ate" relative to their offensive stat.
+  if (usesMultiHitSturdyBreak) {
+    const atkStat0 = Math.floor(calcStat(atkBase, 0, 31, 50, 1.0) * atkTotalMult);
+    const { min: s1, max: s2 } = damageSingle(activePower, atkStat0, defStat, stabFactor, effFactor, 1.0);
+    if (s2 <= 0) return null; // move does zero damage even before Sturdy — can't trigger it
+    return {
+      evNeeded: 0, item: undefined, stab, effFactor,
+      minDmg: s1 * 2, maxDmg: s2 * 2,
+      adjAccuracy, needsGoingSecond, hitsRequired: 2, breaksSturdy: true,
+    };
+  }
+
   let evNeeded: number | null;
   let item: HeldItem | undefined;
+
+  // ── Multi-hit: scale target HP for the EV search ──────────────────────────
+  // For a guaranteed OHKO: need multiHit.min hits × minDmg ≥ targetHP
+  //   → equivalent to minDmg ≥ ⌈targetHP / minHits⌉ → use scaledTargetHP = ⌈hp / minHits⌉
+  // For a possible OHKO:   need multiHit.max hits × maxDmg ≥ targetHP
+  //   → scaledTargetHP = ⌈hp / maxHits⌉
+  // Single-hit moves (or Mold Breaker bypassing Sturdy) use unscaled HP.
+  const multiHitCount = !showPossible
+    ? (move.multiHit?.min ?? 1)
+    : (move.multiHit?.max ?? 1);
+  const scaledTargetHP = move.multiHit
+    ? Math.ceil(ts.hp / multiHitCount)
+    : ts.hp;
 
   if (isFoulPlay) {
     // Foul Play uses the target's Attack including their active Attack stage
     const foulPlayAtk = Math.floor(ts.atk * stageMult(ts.atkStage));
     const { min, max } = damageSingle(effectivePower, foulPlayAtk, defStat, stabFactor, effFactor, 1.0);
-    const lands = !showPossible ? min >= ts.hp : max >= ts.hp;
+    const lands = !showPossible ? min >= scaledTargetHP : max >= scaledTargetHP;
     if (!lands) return null;
     evNeeded = 0;
   } else {
-    evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult, evStep, maxAttackerEV);
+    evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult, evStep, maxAttackerEV);
 
     // Only fall back to a type-boosting item if no choice item is active — can't hold two items.
     if (evNeeded === null && choiceItemMult === 1.0) {
       const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
       if (typeItem) {
-        evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult, evStep, maxAttackerEV);
+        evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult, evStep, maxAttackerEV);
         if (evNeeded !== null) item = typeItem;
       }
     }
@@ -638,11 +736,11 @@ function tryOHKO(
     if (evNeeded === null && move.id === ROUND_MOVE_ID) {
       item = undefined;
       activePower = effectivePower * 2;
-      evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult, evStep, maxAttackerEV);
+      evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult, evStep, maxAttackerEV);
       if (evNeeded === null && choiceItemMult === 1.0) {
         const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
         if (typeItem) {
-          evNeeded = minEVsToOHKO(activePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult, evStep, maxAttackerEV);
+          evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult, evStep, maxAttackerEV);
           if (evNeeded !== null) item = typeItem;
         }
       }
@@ -657,13 +755,30 @@ function tryOHKO(
   let baseEvNeeded: number | undefined;
   if (defAbility && !isFoulPlay) {
     const basePower = activePower / defAbilityMult;
-    baseEvNeeded = minEVsToOHKO(basePower, atkBase, defStat, ts.hp, stabFactor, effFactor, !showPossible, item?.boost ?? 1.0, atkTotalMult, evStep, maxAttackerEV) ?? undefined;
+    baseEvNeeded = minEVsToOHKO(basePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, item?.boost ?? 1.0, atkTotalMult, evStep, maxAttackerEV) ?? undefined;
   }
 
-  const atkStat = isFoulPlay ? ts.atk : Math.floor(calcStat(atkBase, evNeeded, 31, 50, 1.0) * atkTotalMult);
-  const { min, max } = damageSingle(activePower, atkStat, defStat, stabFactor, effFactor, item?.boost ?? 1.0);
+  const atkStat = isFoulPlay
+    ? Math.floor(ts.atk * stageMult(ts.atkStage))
+    : Math.floor(calcStat(atkBase, evNeeded, 31, 50, 1.0) * atkTotalMult);
+  const { min: singleMin, max: singleMax } = damageSingle(activePower, atkStat, defStat, stabFactor, effFactor, item?.boost ?? 1.0);
 
-  return { evNeeded, baseEvNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy, needsRoundBoost, needsGoingSecond, defAbility };
+  // ── Multi-hit: compute actual hits needed and total damage ─────────────────
+  // With the chosen EVs, work out the exact number of hits required:
+  //   worst-case RNG (minDmg/hit) for guaranteed mode, best-case (maxDmg/hit) for possible.
+  // The displayed min/max damage is total damage across all required hits.
+  let hitsRequired: number | undefined;
+  let totalMin = singleMin;
+  let totalMax = singleMax;
+  if (move.multiHit) {
+    const dmgPerHit = !showPossible ? singleMin : singleMax;
+    const raw = dmgPerHit > 0 ? Math.ceil(ts.hp / dmgPerHit) : move.multiHit.max;
+    hitsRequired = Math.max(1, Math.min(raw, move.multiHit.max));
+    totalMin = singleMin * hitsRequired;
+    totalMax = singleMax * hitsRequired;
+  }
+
+  return { evNeeded, baseEvNeeded, item, stab, effFactor, minDmg: totalMin, maxDmg: totalMax, adjAccuracy, needsRoundBoost, needsGoingSecond, defAbility, hitsRequired };
 }
 
 export function findPokemonOHKOs(
@@ -713,6 +828,11 @@ export function findPokemonOHKOs(
     const moveIds = data.pokemonMoves.get(attacker.id);
     if (!moveIds) continue;
 
+    // Detect Mold Breaker (and equivalents) and Parental Bond for this attacker.
+    // These affect Sturdy bypass logic inside tryOHKO.
+    const hasMoldBreaker = attacker.abilities.some(a => STURDY_BYPASS_ABILITIES.has(a.identifier));
+    const hasParentalBond = attacker.id === PARENTAL_BOND_POKEMON_ID;
+
     const movesPerTarget: OHKOMoveInfo[][] = targets.map(() => []);
 
     for (const moveId of moveIds) {
@@ -729,22 +849,41 @@ export function findPokemonOHKOs(
 
       type AbilityConfig = { mod: AbilityMod | null; ability: typeof attacker.abilities[0] | null };
 
-      // Build ability configs for a given weather (determines which weather-dependent abilities apply)
-      const buildConfigs = (w: Weather): AbilityConfig[] => {
-        const configs: AbilityConfig[] = [{ mod: null, ability: null }];
+      /**
+       * Abilities that are situationally available and should not suppress a
+       * no-ability OHKO result when one exists.
+       *
+       * Protean / Libero: in Gen 9 these only activate once per battle, and we
+       * cannot assume the type-change is available for a given attack. If the
+       * move can already OHKO without STAB (just at higher EVs), we prefer to
+       * show that result so the player knows the OHKO is always achievable.
+       * Protean/Libero only appear in results when the OHKO is impossible
+       * without their STAB bonus.
+       */
+      const FALLBACK_ABILITIES = new Set(['protean', 'libero']);
+
+      // Build ability configs for a given weather (determines which weather-dependent abilities apply).
+      // Returns { primary, fallback } — primary configs are tried first; fallback configs only when
+      // primary configs produce no result.
+      const buildConfigs = (w: Weather): { primary: AbilityConfig[]; fallback: AbilityConfig[] } => {
+        const primary:  AbilityConfig[] = [{ mod: null, ability: null }];
+        const fallback: AbilityConfig[] = [];
         for (const ability of attacker.abilities) {
           const m = getAbilityMod(ability.identifier, move, attacker.typeIds, isPhysical, w);
-          if (m) configs.push({ mod: m, ability });
+          if (!m) continue;
+          if (FALLBACK_ABILITIES.has(ability.identifier)) {
+            fallback.push({ mod: m, ability });
+          } else {
+            primary.push({ mod: m, ability });
+          }
         }
-        return configs;
+        return { primary, fallback };
       };
 
-      // Find best attempt across a set of configs under a given weather.
-      // atkNM / spaNM are the attacker nature multipliers (1.0 = neutral).
-      const findBest = (configs: AbilityConfig[], w: Weather, ts: TargetStats, atkNM = 1.0, spaNM = 1.0) => {
+      const tryConfigs = (configs: AbilityConfig[], w: Weather, ts: TargetStats, atkNM = 1.0, spaNM = 1.0) => {
         let best: { attempt: OHKOAttempt; ability: typeof attacker.abilities[0] | null } | null = null;
         for (const { mod, ability } of configs) {
-          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, atkNM, spaNM, evStep, maxAttackerEV);
+          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, atkNM, spaNM, evStep, maxAttackerEV, hasMoldBreaker, hasParentalBond);
           if (attempt && (!best || attempt.evNeeded < best.attempt.evNeeded)) {
             best = { attempt, ability };
           }
@@ -752,8 +891,13 @@ export function findPokemonOHKOs(
         return best;
       };
 
-      const noWeatherConfigs = buildConfigs('none');
-      const withWeatherConfigs = weather !== 'none' ? buildConfigs(weather) : [];
+      // Find best attempt: primary configs first; fall back to situational abilities
+      // (Protean/Libero) only when primary configs cannot achieve the OHKO.
+      const findBest = (configs: { primary: AbilityConfig[]; fallback: AbilityConfig[] }, w: Weather, ts: TargetStats, atkNM = 1.0, spaNM = 1.0) =>
+        tryConfigs(configs.primary, w, ts, atkNM, spaNM) ?? tryConfigs(configs.fallback, w, ts, atkNM, spaNM);
+
+      const noWeatherConfigs   = buildConfigs('none');
+      const withWeatherConfigs = weather !== 'none' ? buildConfigs(weather) : { primary: [], fallback: [] };
 
       for (let ti = 0; ti < targetStats.length; ti++) {
         const ts = targetStats[ti];
@@ -814,6 +958,8 @@ export function findPokemonOHKOs(
             foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
             needsRoundBoost: chosen.needsRoundBoost,
             needsGoingSecond: chosen.needsGoingSecond,
+            hitsRequired: chosen.hitsRequired,
+            breaksSturdy: chosen.breaksSturdy,
             coveredTargetIndices: [],
           });
         }
@@ -869,6 +1015,8 @@ export function findPokemonOHKOs(
               foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
               needsRoundBoost: natureChosen.needsRoundBoost,
               needsGoingSecond: natureChosen.needsGoingSecond,
+              hitsRequired: natureChosen.hitsRequired,
+              breaksSturdy: natureChosen.breaksSturdy,
               nature: natureLabel,
               coveredTargetIndices: [],
             });

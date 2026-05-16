@@ -167,6 +167,38 @@ export async function loadGameData(): Promise<GameData> {
     });
   }
 
+  // ── Multi-hit move tables ────────────────────────────────────────────────────
+  /**
+   * PokeAPI effect IDs for moves that hit multiple times.
+   * Values are { min, max } hits per use.
+   *   30  — 2-5 hits at the same power (Bullet Seed, Rock Blast, Pin Missile, …)
+   *   45  — exactly 2 hits (Double Hit, Dual Chop, Gear Grind, …)
+   *   78  — exactly 2 hits with per-hit poison chance (Twineedle)
+   *   105 — 1-3 hits with increasing power per hit (Triple Kick; modelled at base power)
+   *   443 — 2-5 hits with a side-effect per hit (Scale Shot)
+   */
+  const MULTI_HIT_EFFECT_IDS: Record<number, { min: number; max: number }> = {
+    30:  { min: 2, max: 5 },
+    45:  { min: 2, max: 2 },
+    78:  { min: 2, max: 2 },
+    105: { min: 1, max: 3 },
+    443: { min: 2, max: 5 },
+  };
+  /**
+   * Move-level overrides for multi-hit counts when effect_id alone is insufficient.
+   *   814 — Dual Wingbeat   (2 hits; effect_id = 1 in data)
+   *   818 — Surging Strikes (always exactly 3 critical hits)
+   *   813 — Triple Axel     (3 hits with increasing power; modelled at base power)
+   *   860 — Population Bomb (1-10 hits)
+   */
+  const MULTI_HIT_MOVE_OVERRIDES: Record<number, { min: number; max: number }> = {
+    814: { min: 2, max: 2 },
+    818: { min: 3, max: 3 },
+    813: { min: 3, max: 3 },
+    860: { min: 1, max: 10 },
+  };
+  // ────────────────────────────────────────────────────────────────────────────
+
   // English move names (language_id = 9)
   const moveNames = new Map<number, string>();
   for (const row of moveNamesRows) {
@@ -185,6 +217,10 @@ export async function loadGameData(): Promise<GameData> {
     const id = Number(row.id);
     const rawAcc = row.accuracy;
     const accuracy = rawAcc === '' || rawAcc === undefined ? null : Number(rawAcc);
+    const effectId = Number(row.effect_id) || 0;
+    const multiHit: { min: number; max: number } | null =
+      MULTI_HIT_MOVE_OVERRIDES[id] ?? MULTI_HIT_EFFECT_IDS[effectId] ?? null;
+
     moves.set(id, {
       id,
       identifier: row.identifier,
@@ -196,10 +232,11 @@ export async function loadGameData(): Promise<GameData> {
       description: moveDescriptions[id] ?? '',
       priority: Number(row.priority) || 0,
       flags: moveFlagsJson[String(id)] ?? [],
-      effectId: Number(row.effect_id) || 0,
+      effectId,
       effectChance: row.effect_chance !== '' && row.effect_chance !== undefined
         ? Number(row.effect_chance) : null,
       isSpread: [9, 11].includes(Number(row.target_id)), // all-adjacent or all-adjacent-foes
+      multiHit,
     });
   }
 

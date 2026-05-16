@@ -10,7 +10,10 @@ import {
   FOUL_PLAY_MOVE_ID,
   BODY_PRESS_MOVE_ID,
   PSYSHOCK_MOVE_IDS,
+  findPokemonOHKOs,
+  type TargetConfig,
 } from '../damage';
+import type { GameData, Move, MoveFlag, Pokemon, PokemonAbility } from '../../data/types';
 
 // ─── Stat calculation ────────────────────────────────────────────────────────
 
@@ -414,5 +417,399 @@ describe('move ID constants', () => {
     expect(PSYSHOCK_MOVE_IDS.has(473)).toBe(true);
     expect(PSYSHOCK_MOVE_IDS.has(540)).toBe(true);
     expect(PSYSHOCK_MOVE_IDS.has(548)).toBe(true);
+  });
+});
+
+// ─── Multi-hit & Sturdy integration tests ────────────────────────────────────
+//
+// These tests exercise findPokemonOHKOs with minimal hand-crafted GameData so
+// they run in isolation (no file I/O).  The fixture uses:
+//   • Type 1 (Normal) vs Normal target → neutral effectiveness (factor 100)
+//   • Attacker base Atk 200 so it can reliably OHKO / not OHKO depending on EV
+//   • Minimal stats to avoid floating-point surprises in calcs
+
+function makeAbility(identifier: string, name: string): PokemonAbility {
+  return { identifier, name, description: '', isHidden: false };
+}
+
+function makePokemon(
+  id: number,
+  atk: number,
+  def: number,
+  hp: number,
+  typeIds: number[],
+  abilities: PokemonAbility[] = [],
+): Pokemon {
+  return {
+    id,
+    identifier: `pokemon-${id}`,
+    name: `Pokemon ${id}`,
+    speciesId: id,
+    isDefault: true,
+    typeIds,
+    stats: { hp, atk, def, spa: atk, spd: def, spe: 80 },
+    abilities,
+  };
+}
+
+function makeMove(
+  id: number,
+  power: number,
+  typeId: number,
+  damageClassId: 2 | 3 = 2,
+  multiHit: { min: number; max: number } | null = null,
+  flags: MoveFlag[] = [],
+): Move {
+  return {
+    id,
+    identifier: `move-${id}`,
+    name: `Move ${id}`,
+    typeId,
+    power,
+    damageClassId,
+    accuracy: 100,
+    description: '',
+    priority: 0,
+    flags,
+    effectId: 0,
+    effectChance: null,
+    isSpread: false,
+    multiHit,
+  };
+}
+
+/** Minimal GameData with one attacker, its moves, one target type, and neutral efficacy. */
+function makeData(
+  attacker: Pokemon,
+  targetTypeId: number,
+  moves: Move[],
+): GameData {
+  const pokemonMap = new Map<number, Pokemon>([[attacker.id, attacker]]);
+  const movesMap = new Map<number, Move>(moves.map(m => [m.id, m]));
+  const pokemonMoves = new Map<number, Set<number>>([[attacker.id, new Set(moves.map(m => m.id))]]);
+  // Neutral effectiveness for each move type vs target type
+  const typeEfficacy = new Map<string, number>();
+  for (const m of moves) {
+    typeEfficacy.set(`${m.typeId}-${targetTypeId}`, 100); // neutral
+  }
+  const typeNames = new Map<number, string>([[targetTypeId, 'Normal']]);
+  const championsRoster = new Set<number>();
+  return { pokemon: pokemonMap, moves: movesMap, pokemonMoves, typeEfficacy, typeNames, championsRoster };
+}
+
+/** Build a minimal TargetConfig from a Pokemon with optional ability selection. */
+function makeTarget(
+  pokemon: Pokemon,
+  selectedAbilityIdentifier?: string,
+): TargetConfig {
+  return {
+    pokemon,
+    evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+    selectedAbilityIdentifier,
+  };
+}
+
+// ── Attacker/Target fixtures ───────────────────────────────────────────────────
+// Attacker: base Atk 200, type 1 (Normal). With 0 EVs its Attack is 255.
+// Target:   base HP 80, base Def 30 → HP ≈ 170, Def ≈ 71 at 0 EVs.
+// A Normal-type move at power 100 from this attacker will easily OHKO the target in one hit.
+// A power-1 move will NOT OHKO in one hit but should OHKO with enough hits.
+
+const NORMAL_TYPE = 1;
+const ATTACKER_ID = 1;
+const TARGET_ID = 2;
+
+const attacker = makePokemon(ATTACKER_ID, 200, 100, 100, [NORMAL_TYPE]);
+const target   = makePokemon(TARGET_ID,    50,  30,  80, [NORMAL_TYPE], [
+  makeAbility('sturdy', 'Sturdy'),
+]);
+
+// ─── Multi-hit damage accumulation ───────────────────────────────────────────
+
+describe('findPokemonOHKOs — multi-hit moves', () => {
+  const singleHitMove = makeMove(101, 100, NORMAL_TYPE);
+  const twoHitMove    = makeMove(102,  55, NORMAL_TYPE, 2, { min: 2, max: 2 });
+  // power 60 × 2-5 hits — enough damage that ≥ 2 guaranteed hits KO the target
+  const twoToFiveHit  = makeMove(103,  60, NORMAL_TYPE, 2, { min: 2, max: 5 });
+
+  const targetCfg = makeTarget(target);
+
+  it('single-hit move result has no hitsRequired field', () => {
+    const data = makeData(attacker, NORMAL_TYPE, [singleHitMove]);
+    const results = findPokemonOHKOs([targetCfg], data);
+    expect(results.length).toBeGreaterThan(0);
+    const info = results[0].movesPerTarget[0][0];
+    expect(info.hitsRequired).toBeUndefined();
+    expect(info.breaksSturdy).toBeUndefined();
+  });
+
+  it('fixed 2-hit move has hitsRequired = 2 and doubled damage', () => {
+    const data = makeData(attacker, NORMAL_TYPE, [twoHitMove]);
+    const results = findPokemonOHKOs([targetCfg], data);
+    expect(results.length).toBeGreaterThan(0);
+    const info = results[0].movesPerTarget[0][0];
+    expect(info.hitsRequired).toBe(2);
+    // Damage shown should be ≥ targetHP (KO confirmed)
+    expect(info.maxDamage).toBeGreaterThanOrEqual(info.targetHP);
+  });
+
+  it('2-5 hit move shows hitsRequired ≥ 1 and ≤ max hits', () => {
+    const data = makeData(attacker, NORMAL_TYPE, [twoToFiveHit]);
+    const results = findPokemonOHKOs([targetCfg], data);
+    expect(results.length).toBeGreaterThan(0);
+    const info = results[0].movesPerTarget[0][0];
+    expect(info.hitsRequired).toBeGreaterThanOrEqual(1);
+    expect(info.hitsRequired!).toBeLessThanOrEqual(5);
+  });
+
+  it('2-5 hit move total damage ≥ targetHP (confirmed KO)', () => {
+    const data = makeData(attacker, NORMAL_TYPE, [twoToFiveHit]);
+    const results = findPokemonOHKOs([targetCfg], data);
+    const info = results[0].movesPerTarget[0][0];
+    expect(info.maxDamage).toBeGreaterThanOrEqual(info.targetHP);
+  });
+});
+
+// ─── Sturdy — single-hit blocked ─────────────────────────────────────────────
+
+describe('findPokemonOHKOs — Sturdy blocks single-hit moves', () => {
+  const singleHitMove = makeMove(201, 100, NORMAL_TYPE);
+  const stuardyTarget = makeTarget(target, 'sturdy');
+
+  it('single-hit move is removed from results when target has Sturdy', () => {
+    const data    = makeData(attacker, NORMAL_TYPE, [singleHitMove]);
+    const results = findPokemonOHKOs([stuardyTarget], data);
+    // No attacker should appear — the only available move is blocked by Sturdy
+    expect(results.length).toBe(0);
+  });
+});
+
+// ─── Sturdy — bypassed by multi-hit ──────────────────────────────────────────
+
+describe('findPokemonOHKOs — multi-hit breaks Sturdy', () => {
+  const twoHitMove  = makeMove(301, 50, NORMAL_TYPE, 2, { min: 2, max: 2 });
+  const stuardyTarget = makeTarget(target, 'sturdy');
+
+  it('guaranteed 2-hit move appears in results against a Sturdy target', () => {
+    const data    = makeData(attacker, NORMAL_TYPE, [twoHitMove]);
+    const results = findPokemonOHKOs([stuardyTarget], data);
+    expect(results.length).toBeGreaterThan(0);
+  });
+
+  it('Sturdy-breaking result has breaksSturdy = true', () => {
+    const data    = makeData(attacker, NORMAL_TYPE, [twoHitMove]);
+    const results = findPokemonOHKOs([stuardyTarget], data);
+    const info = results[0].movesPerTarget[0][0];
+    expect(info.breaksSturdy).toBe(true);
+  });
+
+  it('Sturdy-breaking result has hitsRequired = 2', () => {
+    const data    = makeData(attacker, NORMAL_TYPE, [twoHitMove]);
+    const results = findPokemonOHKOs([stuardyTarget], data);
+    const info = results[0].movesPerTarget[0][0];
+    expect(info.hitsRequired).toBe(2);
+  });
+
+  it('Sturdy-breaking result has evNeeded = 0 (no EV investment required)', () => {
+    const data    = makeData(attacker, NORMAL_TYPE, [twoHitMove]);
+    const results = findPokemonOHKOs([stuardyTarget], data);
+    const info = results[0].movesPerTarget[0][0];
+    expect(info.evNeeded).toBe(0);
+  });
+
+  it('Sturdy-breaking move with min=1 (e.g. Population Bomb) does NOT appear as guaranteed KO', () => {
+    // min=1 means it might only hit once — not guaranteed to break Sturdy
+    const popBomb = makeMove(302, 20, NORMAL_TYPE, 2, { min: 1, max: 10 });
+    const data    = makeData(attacker, NORMAL_TYPE, [popBomb]);
+    const results = findPokemonOHKOs([stuardyTarget], data);
+    // Not guaranteed to appear — single-hit is blocked; only possible if max hits = 10 can KO
+    // In guaranteed mode (showPossible=false), population bomb (min=1 hit) can't guarantee Sturdy break
+    expect(results.length).toBe(0);
+  });
+});
+
+// ─── Sturdy — bypassed by Mold Breaker ────────────────────────────────────────
+
+describe('findPokemonOHKOs — Mold Breaker bypasses Sturdy', () => {
+  const singleHitMove = makeMove(401, 100, NORMAL_TYPE);
+  const stuardyTarget = makeTarget(target, 'sturdy');
+
+  it('Mold Breaker attacker can OHKO a Sturdy target with a single-hit move', () => {
+    const mbAttacker = makePokemon(ATTACKER_ID, 200, 100, 100, [NORMAL_TYPE], [
+      makeAbility('mold-breaker', 'Mold Breaker'),
+    ]);
+    const data    = makeData(mbAttacker, NORMAL_TYPE, [singleHitMove]);
+    const results = findPokemonOHKOs([stuardyTarget], data);
+    expect(results.length).toBeGreaterThan(0);
+  });
+
+  it('Mold Breaker result does NOT have breaksSturdy set (Sturdy was simply ignored)', () => {
+    const mbAttacker = makePokemon(ATTACKER_ID, 200, 100, 100, [NORMAL_TYPE], [
+      makeAbility('mold-breaker', 'Mold Breaker'),
+    ]);
+    const data    = makeData(mbAttacker, NORMAL_TYPE, [singleHitMove]);
+    const results = findPokemonOHKOs([stuardyTarget], data);
+    const info = results[0].movesPerTarget[0][0];
+    expect(info.breaksSturdy).toBeUndefined();
+  });
+
+  it('Turboblaze also bypasses Sturdy (equivalent to Mold Breaker)', () => {
+    const tbAttacker = makePokemon(ATTACKER_ID, 200, 100, 100, [NORMAL_TYPE], [
+      makeAbility('turboblaze', 'Turboblaze'),
+    ]);
+    const data    = makeData(tbAttacker, NORMAL_TYPE, [singleHitMove]);
+    const results = findPokemonOHKOs([stuardyTarget], data);
+    expect(results.length).toBeGreaterThan(0);
+  });
+
+  it('Teravolt also bypasses Sturdy (equivalent to Mold Breaker)', () => {
+    const tvAttacker = makePokemon(ATTACKER_ID, 200, 100, 100, [NORMAL_TYPE], [
+      makeAbility('teravolt', 'Teravolt'),
+    ]);
+    const data    = makeData(tvAttacker, NORMAL_TYPE, [singleHitMove]);
+    const results = findPokemonOHKOs([stuardyTarget], data);
+    expect(results.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Parental Bond ────────────────────────────────────────────────────────────
+
+describe('findPokemonOHKOs — Parental Bond bypasses Sturdy', () => {
+  const singleHitMove = makeMove(501, 50, NORMAL_TYPE);
+  const stuardyTarget = makeTarget(target, 'sturdy');
+
+  it('Mega Kangaskhan (ID 10039) bypasses Sturdy with a single-hit move', () => {
+    // Parental Bond makes every move hit twice → first breaks Sturdy, second KOs
+    const megaKang = makePokemon(10039, 125, 100, 105, [NORMAL_TYPE]);
+    const data     = makeData(megaKang, NORMAL_TYPE, [singleHitMove]);
+    const results  = findPokemonOHKOs([stuardyTarget], data);
+    expect(results.length).toBeGreaterThan(0);
+  });
+
+  it('Mega Kangaskhan result has breaksSturdy = true', () => {
+    const megaKang = makePokemon(10039, 125, 100, 105, [NORMAL_TYPE]);
+    const data     = makeData(megaKang, NORMAL_TYPE, [singleHitMove]);
+    const results  = findPokemonOHKOs([stuardyTarget], data);
+    const info = results[0].movesPerTarget[0][0];
+    expect(info.breaksSturdy).toBe(true);
+  });
+
+  it('non-Mega-Kangaskhan Pokémon (ID ≠ 10039) is still blocked by Sturdy', () => {
+    const notKang = makePokemon(115, 95, 80, 105, [NORMAL_TYPE]); // base Kangaskhan (not mega)
+    const data    = makeData(notKang, NORMAL_TYPE, [singleHitMove]);
+    const results = findPokemonOHKOs([stuardyTarget], data);
+    expect(results.length).toBe(0);
+  });
+});
+
+// ─── Protean / Libero ─────────────────────────────────────────────────────────
+// Protean and Libero change the user's type to match the move before it hits,
+// granting STAB (×1.5) on every move regardless of the attacker's actual types.
+//
+// Fixture math (verified):
+//   Attacker base Atk 103 (Greninja-like), Water move power 80, Normal-type target.
+//   Target: base HP 50 → 125 HP, base Def 30 → 50 Def.
+//
+//   With Protean (STAB 1.5×):
+//     252 EVs → max 166, min 141  — both ≥ 125  → GUARANTEED OHKO ✓
+//   Without Protean (no STAB 1.0×):
+//     252 EVs → max 111            — 111 < 125  → CANNOT OHKO at any EV ✓
+//
+// The gap is unambiguous: Protean is the sole differentiator.
+
+describe('findPokemonOHKOs — Protean / Libero always grant STAB', () => {
+  const WATER_TYPE  = 11;
+  // Water move on a Normal-type attacker — no natural STAB
+  const waterMove = makeMove(601, 80, WATER_TYPE);
+
+  // Soft target: base HP 50 (→125 HP), base Def 30 (→50 Def) — chosen so
+  // Protean unlocks a guaranteed OHKO that is impossible without it.
+  const softTarget = makeTarget(makePokemon(TARGET_ID, 50, 30, 50, [NORMAL_TYPE]));
+
+  it('without Protean: cannot OHKO even at 252 EVs (max damage 111 < 125 HP)', () => {
+    const noAbility = makePokemon(ATTACKER_ID, 103, 80, 100, [NORMAL_TYPE]);
+    const data = makeData(noAbility, NORMAL_TYPE, [waterMove]);
+    const results = findPokemonOHKOs([softTarget], data);
+    // No STAB → move can never OHKO the target regardless of EV investment
+    expect(results.length).toBe(0);
+  });
+
+  it('Protean grants STAB and enables the OHKO (guaranteed at 252 EVs)', () => {
+    const proteanAttacker = makePokemon(ATTACKER_ID, 103, 80, 100, [NORMAL_TYPE], [
+      makeAbility('protean', 'Protean'),
+    ]);
+    const data    = makeData(proteanAttacker, NORMAL_TYPE, [waterMove]);
+    const results = findPokemonOHKOs([softTarget], data);
+    expect(results.length).toBeGreaterThan(0);
+  });
+
+  it('Protean result has abilityMod set to "protean"', () => {
+    const proteanAttacker = makePokemon(ATTACKER_ID, 103, 80, 100, [NORMAL_TYPE], [
+      makeAbility('protean', 'Protean'),
+    ]);
+    const data    = makeData(proteanAttacker, NORMAL_TYPE, [waterMove]);
+    const results = findPokemonOHKOs([softTarget], data);
+    const info = results[0].movesPerTarget[0][0];
+    expect(info.abilityMod?.identifier).toBe('protean');
+  });
+
+  it('Protean does NOT double-count STAB when the attacker already has the move type', () => {
+    // Water-type attacker using a Water move already has STAB — Protean should return null
+    // (the getAbilityMod guard: `attackerTypeIds.includes(move.typeId) ? null : mod(...)`)
+    // so the result should be identical to no-ability.
+    const waterNoAbility = makePokemon(ATTACKER_ID, 103, 80, 100, [WATER_TYPE]);
+    const waterProtean   = makePokemon(ATTACKER_ID, 103, 80, 100, [WATER_TYPE], [
+      makeAbility('protean', 'Protean'),
+    ]);
+    const dataNoAbility = makeData(waterNoAbility, NORMAL_TYPE, [makeMove(602, 80, WATER_TYPE)]);
+    const dataProtean   = makeData(waterProtean,   NORMAL_TYPE, [makeMove(602, 80, WATER_TYPE)]);
+
+    const resNoAbility = findPokemonOHKOs([softTarget], dataNoAbility);
+    const resProtean   = findPokemonOHKOs([softTarget], dataProtean);
+
+    // Both can OHKO (Water attacker has natural STAB). EVs must be equal — no double bonus.
+    expect(resNoAbility.length).toBe(resProtean.length);
+    if (resNoAbility.length > 0 && resProtean.length > 0) {
+      expect(resProtean[0].movesPerTarget[0][0].evNeeded)
+        .toBe(resNoAbility[0].movesPerTarget[0][0].evNeeded);
+    }
+  });
+
+  it('Libero grants exactly the same bonus as Protean', () => {
+    const libero  = makePokemon(ATTACKER_ID, 103, 80, 100, [NORMAL_TYPE], [makeAbility('libero',  'Libero')]);
+    const protean = makePokemon(ATTACKER_ID, 103, 80, 100, [NORMAL_TYPE], [makeAbility('protean', 'Protean')]);
+
+    const resLibero  = findPokemonOHKOs([softTarget], makeData(libero,  NORMAL_TYPE, [waterMove]));
+    const resProtean = findPokemonOHKOs([softTarget], makeData(protean, NORMAL_TYPE, [waterMove]));
+
+    expect(resLibero.length).toBe(resProtean.length);
+    if (resLibero.length > 0 && resProtean.length > 0) {
+      expect(resLibero[0].movesPerTarget[0][0].evNeeded)
+        .toBe(resProtean[0].movesPerTarget[0][0].evNeeded);
+    }
+  });
+
+  it('Protean is only shown when required — no-ability result wins when the OHKO is already achievable', () => {
+    // Attacker strong enough (base Atk 200) to OHKO without STAB.
+    // Protean is in the ability list, but since no-ability can already OHKO it should NOT
+    // appear as the abilityMod — the no-ability path is shown instead.
+    const strongNoAbility = makePokemon(ATTACKER_ID, 200, 80, 100, [NORMAL_TYPE]);
+    const strongProtean   = makePokemon(ATTACKER_ID, 200, 80, 100, [NORMAL_TYPE], [
+      makeAbility('protean', 'Protean'),
+    ]);
+
+    const resNoAbility = findPokemonOHKOs([softTarget], makeData(strongNoAbility, NORMAL_TYPE, [waterMove]));
+    const resProtean   = findPokemonOHKOs([softTarget], makeData(strongProtean,   NORMAL_TYPE, [waterMove]));
+
+    // Both should find a result — the move OHKOs without STAB at high Atk
+    expect(resNoAbility.length).toBeGreaterThan(0);
+    expect(resProtean.length).toBeGreaterThan(0);
+
+    // Even though the attacker has Protean, it should NOT be marked as required
+    expect(resProtean[0].movesPerTarget[0][0].abilityMod).toBeUndefined();
+
+    // The evNeeded should be the same (no-ability result, not the Protean shortcut)
+    expect(resProtean[0].movesPerTarget[0][0].evNeeded)
+      .toBe(resNoAbility[0].movesPerTarget[0][0].evNeeded);
   });
 });
