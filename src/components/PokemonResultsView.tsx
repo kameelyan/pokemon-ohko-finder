@@ -138,7 +138,7 @@ function StatTooltipContent({ pokemon }: { pokemon: Pokemon }) {
   );
 }
 
-function statColor(val: number): string {
+export function statColor(val: number): string {
   if (val >= 120) return '#68d391';
   if (val >= 90) return '#f6e05e';
   if (val >= 60) return '#f6ad55';
@@ -176,7 +176,7 @@ const FORM_CATEGORIES: { key: FormCategory; label: string; test: (id: string) =>
   }},
 ];
 
-function getFormCategory(identifier: string, isDefault: boolean): FormCategory | null {
+export function getFormCategory(identifier: string, isDefault: boolean): FormCategory | null {
   if (isDefault) return null;
   for (const fc of FORM_CATEGORIES.slice(0, 3)) {
     if (fc.test(identifier)) return fc.key;
@@ -210,7 +210,7 @@ const EMPTY_FILTERS: Filters = {
   excludedFlags: new Set(),
 };
 
-function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boolean): number {
+export function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boolean): number {
   return (
     f.types.size +
     (f.minSpe !== '' ? 1 : 0) +
@@ -234,7 +234,7 @@ function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boole
  * outspeed `targetSpeed` at L50 with the given nature multiplier, or null if
  * even 252 EVs cannot achieve it.
  */
-function minSpeedEVs(baseSpe: number, targetSpeed: number, natureMult: number, atkStageMult = 1.0, step = 4, maxEV = 252): number | null {
+export function minSpeedEVs(baseSpe: number, targetSpeed: number, natureMult: number, atkStageMult = 1.0, step = 4, maxEV = 252): number | null {
   for (let ev = 0; ev <= maxEV; ev += step) {
     if (Math.floor(calcStat(baseSpe, ev, 31, 50, natureMult) * atkStageMult) > targetSpeed) return ev;
   }
