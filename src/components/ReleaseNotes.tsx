@@ -5,6 +5,20 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.10.1',
+    date: 'May 2026',
+    title: 'Choice Item & Mega Fixes',
+    sections: [
+      {
+        heading: '🐛 Bug Fixes',
+        items: [
+          'Mega Evolutions and Primal forms are now excluded from results when a Choice item (Band, Scarf, or Specs) is selected, since their held item slot is already occupied by their Mega Stone or Primal Orb.',
+          'The move count badge (e.g. "4 guaranteed") now always matches the number of moves actually shown in the table. Previously it could show a higher count by including item-requiring moves that were filtered out of the display for Mega Pokémon.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.10.0',
     date: 'May 2026',
     title: 'Target Ability Support',
