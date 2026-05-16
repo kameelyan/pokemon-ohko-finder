@@ -1596,6 +1596,22 @@ function AdditionalSettings({
               <StatStageStepper label="Spe" value={speStage} onChange={onSpeStageChange} />
             </div>
           </div>
+
+          {/* Weather nudge */}
+          <div>
+            <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Weather
+            </div>
+            <div style={{
+              fontSize: '11px', color: '#718096',
+              background: '#edf2f7', border: '1px solid #e2e8f0',
+              borderRadius: '5px', padding: '6px 8px',
+              lineHeight: 1.5,
+            }}>
+              ☁️ Weather affects incoming damage (e.g. Sand chips, Rain boosts Water moves). Set it in the{' '}
+              <strong style={{ color: '#2b6cb0' }}>Battle Effects</strong> dropdown below.
+            </div>
+          </div>
         </div>
       )}
     </div>

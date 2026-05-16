@@ -46,16 +46,28 @@ function CategoryIcon({ damageClassId }: { damageClassId: number }) {
   );
 }
 
+/** Emoji fallbacks for items whose sprites are missing from the PokeAPI sprites repo */
+const ITEM_EMOJI_FALLBACK: Record<string, string> = {
+  'fairy-feather': '🪶',
+};
+
 function ItemIcon({ identifier, name, boost, size = 16 }: { identifier: string; name: string; boost: number; size?: number }) {
   const [failed, setFailed] = useState(false);
   const src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${identifier}.png`;
   const pct = Math.round((boost - 1) * 100);
+  const emoji = ITEM_EMOJI_FALLBACK[identifier];
   if (failed) {
     return (
       <Tooltip content={`${name} (+${pct}%)`} side="bottom">
-        <span style={{ fontSize: '10px', color: '#b45309', fontWeight: 700, cursor: 'help' }}>
-          [{name}]
-        </span>
+        {emoji ? (
+          <span style={{ fontSize: size, lineHeight: 1, cursor: 'help', display: 'block' }} title={name}>
+            {emoji}
+          </span>
+        ) : (
+          <span style={{ fontSize: '10px', color: '#b45309', fontWeight: 700, cursor: 'help' }}>
+            [{name}]
+          </span>
+        )}
       </Tooltip>
     );
   }

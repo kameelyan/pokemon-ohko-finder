@@ -5,6 +5,30 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.16.0',
+    date: 'May 2026',
+    title: 'Multi-Hit Moves, Sturdy & Protean',
+    sections: [
+      {
+        heading: '✨ New',
+        items: [
+          'Multi-hit moves (e.g. Bullet Seed, Icicle Spear, Scale Shot) now show how many hits are required to OHKO the target. The hit count chip (e.g. ✕3 hits) appears alongside the move in expanded result cards.',
+          'Sturdy is now handled correctly: single-hit moves can no longer OHKO a Sturdy target from full HP. Only multi-hit moves (min 2+ hits), Mold Breaker / Teravolt / Turboblaze users, and Mega Kangaskhan (Parental Bond) bypass it. Matching results show a 💥 Breaks Sturdy chip.',
+          'Protean and Libero are now accounted for — they grant STAB on every move regardless of the attacker\'s typing. These only appear in results when the OHKO is impossible without the type change (i.e. Protean/Libero is genuinely required).',
+          'Fairy Feather now shows a 🪶 emoji fallback when its sprite is missing from the Pokémon sprite repository (Gen 9 item not yet available).',
+          'The Additional Modifiers panel now includes a Weather note pointing users to the Battle Effects dropdown.',
+        ],
+      },
+      {
+        heading: '🧪 Testing',
+        items: [
+          'Added unit tests for multi-hit damage scaling, Sturdy blocking, Sturdy bypass via multi-hit and Mold Breaker, Parental Bond Sturdy bypass, and Protean/Libero STAB forcing.',
+          'Added two Playwright end-to-end tests: selecting Sturdy on Steelix reduces the result count vs Rock Head, and expanding Sturdy-break results shows the Breaks Sturdy chip.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.15.0',
     date: 'May 2026',
     title: 'Weather Damage Fix',
