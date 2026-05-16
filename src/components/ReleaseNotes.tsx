@@ -5,6 +5,21 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.14.0',
+    date: 'May 2026',
+    title: 'Test Coverage & Weather Defense Verification',
+    sections: [
+      {
+        heading: '🧪 Testing',
+        items: [
+          'Added Vitest unit tests (58 tests) covering HP/stat formulas, stage multipliers, weather and terrain offensive multipliers, core damage scaling, and move ID constants.',
+          'Added Playwright end-to-end tests (7 tests) covering app load, Pokémon search, result cards, ability tooltips, weather selection, card expansion, and empty state.',
+          'Extracted weather defensive multiplier logic into a testable `getWeatherDefMult` function. New tests explicitly verify Snow boosts Ice-type Defense ×1.5 vs physical moves (and Psyshock), and that it has no effect on special moves — confirming the reported snow defense behaviour is correct.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.13.0',
     date: 'May 2026',
     title: 'Ability Tooltips & Sprite Fixes',

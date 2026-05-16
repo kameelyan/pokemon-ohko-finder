@@ -152,7 +152,7 @@ export const TERRAIN_INFO: Record<Exclude<Terrain, 'none'>, {
 /** Move IDs weakened ×0.5 under Grassy Terrain (Earthquake, Magnitude, Bulldoze). */
 const GRASSY_WEAKENED_MOVE_IDS = new Set([89, 222, 523]);
 
-function getTerrainMult(terrain: Terrain, moveId: number, effectiveTypeId: number): number {
+export function getTerrainMult(terrain: Terrain, moveId: number, effectiveTypeId: number): number {
   switch (terrain) {
     case 'electric': return effectiveTypeId === 13 ? 1.3 : 1.0;
     case 'grassy':
@@ -179,11 +179,33 @@ export const WEATHER_INFO: Record<Exclude<Weather, 'none'>, {
 };
 
 /** Multiplier that weather applies to a move's effective type (after ability type override). */
-function getWeatherMult(weather: Weather, effectiveTypeId: number): number {
+export function getWeatherMult(weather: Weather, effectiveTypeId: number): number {
   if (weather === 'sun'  && effectiveTypeId === 10) return 1.5; // Fire boosted
   if (weather === 'sun'  && effectiveTypeId === 11) return 0.5; // Water weakened
   if (weather === 'rain' && effectiveTypeId === 11) return 1.5; // Water boosted
   if (weather === 'rain' && effectiveTypeId === 10) return 0.5; // Fire weakened
+  return 1.0;
+}
+
+/**
+ * Multiplier that weather applies to the **defender's** effective stat.
+ *   Sand → Rock-type gains ×1.5 Sp. Def (special moves only; Psyshock hits Def so not affected)
+ *   Snow → Ice-type gains ×1.5 Def     (physical moves and Psyshock)
+ *
+ * @param isPhysical   true if the attacking move is physical
+ * @param isPsyshock   true if the attacking move is Psyshock / Psystrike / Secret Sword
+ * @param targetTypeIds array of the defending Pokémon's type IDs
+ */
+export function getWeatherDefMult(
+  weather: Weather,
+  isPhysical: boolean,
+  isPsyshock: boolean,
+  targetTypeIds: number[],
+): number {
+  const hitsSpDef = !isPhysical && !isPsyshock;
+  const hitsDef   =  isPhysical ||  isPsyshock;
+  if (weather === 'sand' && hitsSpDef && targetTypeIds.includes(6))  return 1.5; // Rock SpDef
+  if (weather === 'snow' && hitsDef   && targetTypeIds.includes(15)) return 1.5; // Ice Def
   return 1.0;
 }
 
@@ -332,7 +354,7 @@ export function stageMult(stage: number): number {
   return s >= 0 ? (2 + s) / 2 : 2 / (2 - s);
 }
 
-function damageSingle(
+export function damageSingle(
   power: number,
   atk: number,
   def: number,
@@ -540,12 +562,7 @@ function tryOHKO(
   // Weather-based defensive stat boosts on the target:
   //   Sand → Rock-type Pokémon gain ×1.5 Sp. Def (special moves only; Psyshock hits Def so not affected)
   //   Snow → Ice-type Pokémon gain ×1.5 Def (physical moves and Psyshock)
-  const hitsSpDef = !isPhysical && !isPsyshock;
-  const hitsDef   =  isPhysical ||  isPsyshock;
-  const weatherStatMult =
-    (weather === 'sand' && hitsSpDef && ts.pokemon.typeIds.includes(6))  ? 1.5 : // Rock SpDef
-    (weather === 'snow' && hitsDef   && ts.pokemon.typeIds.includes(15)) ? 1.5 : // Ice Def
-    1.0;
+  const weatherStatMult = getWeatherDefMult(weather, isPhysical, isPsyshock, ts.pokemon.typeIds);
   const defStat = Math.floor(rawDef * targetStageMult * statMult * screenMult * weatherStatMult);
 
   // Attacker stat stage — physical uses atkStage, special uses spaStage.
