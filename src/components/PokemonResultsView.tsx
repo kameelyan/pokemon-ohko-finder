@@ -305,7 +305,9 @@ export default function PokemonResultsView({ title, results, targetNames, target
       }
 
       if (filters.noEvs && !r.movesPerTarget.every(moves => moves.some(m => m.evNeeded === 0))) return false;
-      const isMega = r.pokemon.identifier.includes('-mega');
+      const isMega = r.pokemon.identifier.includes('-mega') || r.pokemon.identifier.includes('-primal');
+      // Mega and Primal Pokémon hold their Mega Stone / Orb and can't use a Choice item
+      if (choiceItem !== null && isMega) return false;
       if ((filters.noItem || isMega) && !r.movesPerTarget.every(moves => moves.some(m => !m.item))) return false;
       if (filters.defaultOnly && !r.pokemon.isDefault) return false;
       if (filters.excludedForms.size > 0 && !r.pokemon.isDefault) {
