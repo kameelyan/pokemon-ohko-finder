@@ -1401,24 +1401,30 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                       </span>
                     </Tooltip>
                   )}
-                  {/* Defensive ability chip */}
-                  {m.defAbility && (
-                    <Tooltip
-                      content={`Target's ${m.defAbility.name} ${m.defAbility.mult < 1 ? `reduces incoming ${data.typeNames.get(m.move.typeId) ?? ''}-type damage (×${m.defAbility.mult})` : `amplifies incoming ${data.typeNames.get(m.move.typeId) ?? ''}-type damage (×${m.defAbility.mult})`}`}
-                      side="bottom"
-                    >
-                      <span style={{
-                        fontSize: '10px', fontWeight: 700, cursor: 'help',
-                        background: m.defAbility.mult < 1 ? '#ebf8ff' : '#fff5f5',
-                        color:      m.defAbility.mult < 1 ? '#2c5282' : '#9b2335',
-                        border:     `1px solid ${m.defAbility.mult < 1 ? '#90cdf4' : '#fc8181'}`,
-                        borderRadius: '3px', padding: '1px 5px',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        🛡 {m.defAbility.name}
-                      </span>
-                    </Tooltip>
-                  )}
+                  {/* Defensive ability chips — one per relevant ability the target could have */}
+                  {m.defAbilities.map(da => {
+                    const isImmune = da.immune;
+                    const isAmp    = !da.immune && da.mult > 1;
+                    const bg     = isImmune ? '#fff5f5' : isAmp ? '#fffbeb' : '#ebf8ff';
+                    const color  = isImmune ? '#9b2335' : isAmp ? '#92400e' : '#2c5282';
+                    const border = isImmune ? '#fc8181' : isAmp ? '#f6ad55' : '#90cdf4';
+                    const label  = isImmune ? '⛔' : isAmp ? '⚡' : '🛡';
+                    const tip    = isImmune
+                      ? `Target's ${da.name} grants immunity — this move won't deal damage`
+                      : `Target's ${da.name} ${da.mult < 1 ? `reduces damage (×${da.mult}) — more EVs needed` : `amplifies damage (×${da.mult}) — easier to OHKO`}`;
+                    return (
+                      <Tooltip key={da.identifier} content={tip} side="bottom">
+                        <span style={{
+                          fontSize: '10px', fontWeight: 700, cursor: 'help',
+                          background: bg, color, border: `1px solid ${border}`,
+                          borderRadius: '3px', padding: '1px 5px',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {label} {da.name}
+                        </span>
+                      </Tooltip>
+                    );
+                  })}
                   {/* Coverage chip */}
                   {totalTargets > 1 && m.coveredTargetIndices.length > 1 && (
                     <Tooltip
