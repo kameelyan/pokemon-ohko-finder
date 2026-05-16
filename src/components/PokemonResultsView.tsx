@@ -1401,8 +1401,8 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                       </span>
                     </Tooltip>
                   )}
-                  {/* Defensive ability chip */}
-                  {m.defAbility && (() => {
+                  {/* Defensive ability chip — only shown when EV investment is required */}
+                  {m.defAbility && m.evNeeded > 0 && (() => {
                     const isReduction = m.defAbility.mult < 1;
                     const typeName = data.typeNames.get(m.move.typeId) ?? 'this';
                     const multStr = isReduction
