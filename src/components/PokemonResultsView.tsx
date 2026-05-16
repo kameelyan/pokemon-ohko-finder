@@ -761,10 +761,19 @@ export default function PokemonResultsView({ title, results, targetNames, target
           const scarfMult = choiceItem === 'scarf' ? 1.5 : 1.0;
           const attackerSpe = Math.floor(calcStat(pokemon.stats.spe, 0) * stageMult(atkSpeStage) * scarfMult);
 
-          const moveCounts = movesPerTarget.map(moves => ({
-            guaranteed: moves.filter(m => m.isGuaranteed).length,
-            total: moves.length,
-          }));
+          const moveCounts = movesPerTarget.map((moves, ti) => {
+            // Apply the same filters as MoveTable so the count matches what's displayed
+            const visible = moves.filter(m =>
+              (!filters.noItem || !m.item) &&
+              (!filters.noEvs  || m.evNeeded === 0) &&
+              (!isMega         || !m.item) &&
+              (!targetsMustOutspeed[ti] || m.move.priority >= 0)
+            );
+            return {
+              guaranteed: visible.filter(m => m.isGuaranteed).length,
+              total: visible.length,
+            };
+          });
 
           return (
             <div
