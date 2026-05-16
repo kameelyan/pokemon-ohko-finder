@@ -42,6 +42,19 @@ export const ROUND_MOVE_ID = 496;
  */
 export const PSYSHOCK_MOVE_IDS = new Set([473, 540, 548]);
 
+/**
+ * Effect IDs for moves that deal double damage when the user moves after the
+ * target (or takes a hit first this turn).
+ *
+ *  186 — Avalanche / Revenge: doubles power if the user was hit before acting.
+ *        Both have −4 priority so they virtually always go last.
+ *  231 — Payback: doubles power if the target has already moved this turn.
+ *
+ * For calc purposes we always assume the doubled power — the player would only
+ * run these moves in conditions where the double applies.
+ */
+const GOING_SECOND_EFFECT_IDS = new Set([186, 231]);
+
 export interface EVSpread {
   hp: number;
   atk: number;
@@ -265,6 +278,8 @@ export interface OHKOMoveInfo {
   foulPlayAtk?: number;
   /** For Round only: true when the base-power OHKO fails but the doubled power (×2) achieves it. */
   needsRoundBoost?: boolean;
+  /** Avalanche / Revenge / Payback: calculated at ×2 power (assumes user moves after target). */
+  needsGoingSecond?: boolean;
   /** Attacker nature required for this OHKO — absent means neutral nature suffices. */
   nature?: '+atk' | '+spa';
   coveredTargetIndices: number[];
@@ -395,6 +410,7 @@ interface OHKOAttempt {
   maxDmg: number;
   adjAccuracy: number | null;
   needsRoundBoost?: boolean;
+  needsGoingSecond?: boolean;
   defAbility?: { identifier: string; name: string; mult: number };
 }
 
@@ -552,7 +568,11 @@ function tryOHKO(
   const spreadMult = (isDoubles && move.isSpread) ? 0.75 : 1.0;
   // Friend Guard (doubles only): adjacent ally reduces all incoming damage by ×0.75
   const friendGuardMult = ts.friendGuard ? 0.75 : 1.0;
-  const effectivePower = move.power * (abilityMod?.powerMult ?? 1.0) * weatherMult * terrainMult * fairyAuraMult * spreadMult * friendGuardMult * defAbilityMult;
+  // Avalanche / Revenge / Payback: always calculated at double power.
+  // These moves are only ever used when the condition applies (going last / being hit first).
+  const goingSecondMult = GOING_SECOND_EFFECT_IDS.has(move.effectId) ? 2.0 : 1.0;
+  const effectivePower = move.power * goingSecondMult * (abilityMod?.powerMult ?? 1.0) * weatherMult * terrainMult * fairyAuraMult * spreadMult * friendGuardMult * defAbilityMult;
+  const needsGoingSecond = goingSecondMult === 2.0;
   let activePower = effectivePower; // may be doubled for Round
   let needsRoundBoost = false;
 
@@ -610,7 +630,7 @@ function tryOHKO(
   const atkStat = isFoulPlay ? ts.atk : Math.floor(calcStat(atkBase, evNeeded, 31, 50, 1.0) * atkTotalMult);
   const { min, max } = damageSingle(activePower, atkStat, defStat, stabFactor, effFactor, item?.boost ?? 1.0);
 
-  return { evNeeded, baseEvNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy, needsRoundBoost, defAbility };
+  return { evNeeded, baseEvNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy, needsRoundBoost, needsGoingSecond, defAbility };
 }
 
 export function findPokemonOHKOs(
@@ -752,6 +772,7 @@ export function findPokemonOHKOs(
             weatherRequired,
             foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
             needsRoundBoost: chosen.needsRoundBoost,
+            needsGoingSecond: chosen.needsGoingSecond,
             coveredTargetIndices: [],
           });
         }
@@ -806,6 +827,7 @@ export function findPokemonOHKOs(
               weatherRequired: natureWeather,
               foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
               needsRoundBoost: natureChosen.needsRoundBoost,
+              needsGoingSecond: natureChosen.needsGoingSecond,
               nature: natureLabel,
               coveredTargetIndices: [],
             });

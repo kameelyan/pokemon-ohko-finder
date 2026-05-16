@@ -1368,6 +1368,28 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                       </span>
                     </Tooltip>
                   )}
+                  {/* Going-second chip — Avalanche, Revenge, Payback at ×2 power */}
+                  {m.needsGoingSecond && (
+                    <Tooltip
+                      content={
+                        m.move.priority < 0
+                          ? `${m.move.name} has negative priority and almost always moves last. Calculated at ×2 power (assumes the user was hit before attacking this turn).`
+                          : `${m.move.name} doubles in power if the user moves after the target. Calculated at ×2 power (assumes the target has already moved this turn).`
+                      }
+                      side="bottom"
+                      maxWidth={260}
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#ebf8ff', color: '#2b6cb0',
+                        border: '1px solid #90cdf4',
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        ⬇ Goes 2nd
+                      </span>
+                    </Tooltip>
+                  )}
                   {/* Round double-power chip */}
                   {m.move.id === ROUND_MOVE_ID && m.needsRoundBoost && (
                     <Tooltip
