@@ -1491,38 +1491,7 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                 <CategoryIcon damageClassId={m.move.damageClassId} />
               </td>
               <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>
-                <Tooltip
-                  side="bottom"
-                  content={(() => {
-                    const atkLabel = m.move.id === BODY_PRESS_MOVE_ID ? 'Def' : m.move.damageClassId === 2 ? 'Atk' : 'SpA';
-                    const defLabel = PSYSHOCK_MOVE_IDS.has(m.move.id) ? 'Def' : m.move.damageClassId === 2 ? 'Def' : 'SpD';
-                    const stabStr  = m.stab ? ' × 1.5 STAB' : '';
-                    const typeEff  = m.typeEffectiveness;
-                    const typeStr  = typeEff !== 1 ? ` × ${typeEff}× type` : '';
-                    const itemStr  = m.item ? ` × 1.2 (${m.item.name})` : '';
-                    return (
-                      <div style={{ fontSize: '12px', lineHeight: 1.7 }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px', marginBottom: '4px' }}>
-                          <span style={{ color: '#aaa' }}>{atkLabel}</span>
-                          <span style={{ fontWeight: 700 }}>{m.calcAtkStat}</span>
-                          <span style={{ color: '#aaa' }}>{defLabel}</span>
-                          <span style={{ fontWeight: 700 }}>{m.calcDefStat}</span>
-                          <span style={{ color: '#aaa' }}>Power</span>
-                          <span style={{ fontWeight: 700 }}>{Math.round(m.calcPower)}</span>
-                        </div>
-                        <div style={{ color: '#aaa', fontSize: '11px', marginBottom: '4px' }}>
-                          {`⌊⌊22 × ${Math.round(m.calcPower)} × ${m.calcAtkStat} / ${m.calcDefStat}⌋ / 50⌋ + 2`}
-                          {stabStr}{typeStr}{itemStr}
-                        </div>
-                        <div style={{ fontWeight: 700 }}>
-                          {m.minDamage}–{m.maxDamage} / {m.targetHP} HP
-                        </div>
-                      </div>
-                    );
-                  })()}
-                >
-                  <span style={{ cursor: 'help' }}>{m.minDamage}–{m.maxDamage}</span>
-                </Tooltip>
+                {m.minDamage}–{m.maxDamage}
               </td>
               <td style={{ ...td, textAlign: 'right', color: '#555' }}>
                 {minPct}–{maxPct}%

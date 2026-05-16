@@ -265,12 +265,6 @@ export interface OHKOMoveInfo {
   foulPlayAtk?: number;
   /** For Round only: true when the base-power OHKO fails but the doubled power (×2) achieves it. */
   needsRoundBoost?: boolean;
-  /** Effective move power used in the final damage roll (after ability, weather, terrain, spread, etc. — STAB and type effectiveness are applied separately). */
-  calcPower: number;
-  /** Attacker's stat used in the final damage roll (after EVs, nature, stage, held item). */
-  calcAtkStat: number;
-  /** Target's defensive stat used in the final damage roll (after EVs, nature, screens, stage, held item). */
-  calcDefStat: number;
   coveredTargetIndices: number[];
 }
 
@@ -400,9 +394,6 @@ interface OHKOAttempt {
   adjAccuracy: number | null;
   needsRoundBoost?: boolean;
   defAbility?: { identifier: string; name: string; mult: number };
-  calcPower: number;
-  calcAtkStat: number;
-  calcDefStat: number;
 }
 
 /**
@@ -609,7 +600,7 @@ function tryOHKO(
   const atkStat = isFoulPlay ? ts.atk : Math.floor(calcStat(atkBase, evNeeded, 31, 50, 1.0) * atkTotalMult);
   const { min, max } = damageSingle(activePower, atkStat, defStat, stabFactor, effFactor, item?.boost ?? 1.0);
 
-  return { evNeeded, baseEvNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy, needsRoundBoost, defAbility, calcPower: activePower, calcAtkStat: atkStat, calcDefStat: defStat };
+  return { evNeeded, baseEvNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy, needsRoundBoost, defAbility };
 }
 
 export function findPokemonOHKOs(
@@ -751,9 +742,6 @@ export function findPokemonOHKOs(
           abilityMod: abilityRequired,
           defAbility: chosen.defAbility,
           baseEvNeeded: chosen.baseEvNeeded,
-          calcPower: chosen.calcPower,
-          calcAtkStat: chosen.calcAtkStat,
-          calcDefStat: chosen.calcDefStat,
           weatherRequired,
           foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
           needsRoundBoost: chosen.needsRoundBoost,
