@@ -51,7 +51,7 @@ export default function GuidedTour({ steps, onDone }: Props) {
       setSpot(null);
       return;
     }
-    const el = document.querySelector(step.target) as HTMLElement | null;
+    const el = document.querySelector(step.target);
     if (!el) {
       setSpot(null);
       return;
@@ -69,7 +69,7 @@ export default function GuidedTour({ steps, onDone }: Props) {
     // ready is already false (set by goToStep before idx changed).
     // Scroll target into view, measure, then reveal.
     if (step.target) {
-      const el = document.querySelector(step.target) as HTMLElement | null;
+      const el = document.querySelector(step.target);
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         animRef.current = window.setTimeout(() => { recalc(); setReady(true); }, 350);
@@ -134,25 +134,17 @@ export default function GuidedTour({ steps, onDone }: Props) {
     const spotCenterX = spot.left + spot.width / 2;
     const spotCenterY = spot.top + spot.height / 2;
 
-    let top = 0;
-    let left = 0;
+    const cardEl = cardRef.current;
+    const cardH = cardEl ? cardEl.offsetHeight : 180;
+    const top =
+      placement === 'bottom' ? Math.min(spotBottom + CARD_GAP, vh - 200)
+      : placement === 'top'   ? Math.max(8, spot.top - CARD_GAP - cardH)
+      :                         Math.max(8, Math.min(spotCenterY - 80, vh - 200)); // right | left
 
-    if (placement === 'bottom') {
-      top = Math.min(spotBottom + CARD_GAP, vh - 200);
-      left = Math.max(8, Math.min(spotCenterX - CARD_WIDTH / 2, vw - CARD_WIDTH - 8));
-    } else if (placement === 'top') {
-      const cardEl = cardRef.current;
-      const cardH = cardEl ? cardEl.offsetHeight : 180;
-      top = Math.max(8, spot.top - CARD_GAP - cardH);
-      left = Math.max(8, Math.min(spotCenterX - CARD_WIDTH / 2, vw - CARD_WIDTH - 8));
-    } else if (placement === 'right') {
-      top = Math.max(8, Math.min(spotCenterY - 80, vh - 200));
-      left = Math.min(spotRight + CARD_GAP, vw - CARD_WIDTH - 8);
-    } else {
-      // left
-      top = Math.max(8, Math.min(spotCenterY - 80, vh - 200));
-      left = Math.max(8, spot.left - CARD_GAP - CARD_WIDTH);
-    }
+    const left =
+      placement === 'right' ? Math.min(spotRight + CARD_GAP, vw - CARD_WIDTH - 8)
+      : placement === 'left'  ? Math.max(8, spot.left - CARD_GAP - CARD_WIDTH)
+      :                         Math.max(8, Math.min(spotCenterX - CARD_WIDTH / 2, vw - CARD_WIDTH - 8)); // top | bottom
 
     return {
       position: 'fixed',
@@ -201,6 +193,7 @@ export default function GuidedTour({ steps, onDone }: Props) {
       {/* Tour card */}
       <div
         ref={cardRef}
+        // eslint-disable-next-line react-hooks/refs -- cardRef.current is intentionally read for self-measurement; null on first render, effect re-triggers with real height
         style={{ ...getCardStyle(), opacity: ready ? 1 : 0, transition: 'opacity 0.13s ease' }}
         onClick={e => e.stopPropagation()}
       >

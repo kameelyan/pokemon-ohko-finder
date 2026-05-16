@@ -6,6 +6,7 @@ import {
   minSpeedEVs,
 } from '../PokemonResultsView';
 import { calcStat } from '../../calc/damage';
+import type { MoveFlag } from '../../data/types';
 
 // ─── statColor ────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ const emptyFilters = {
   noItem: false,
   defaultOnly: false,
   excludedForms: new Set<'mega' | 'regional' | 'gmax' | 'other'>(),
-  excludedFlags: new Set<string>(),
+  excludedFlags: new Set<MoveFlag>(),
 };
 
 describe('countActiveFilters', () => {

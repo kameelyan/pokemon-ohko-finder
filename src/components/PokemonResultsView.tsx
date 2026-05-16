@@ -254,7 +254,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
   const toggle = (id: number) =>
     setExpandedIds(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
 
@@ -353,7 +353,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
       }
       const cmp = typeof av === 'string'
         ? av.localeCompare(bv as string)
-        : (av as number) - (bv as number);
+        : (av) - (bv as number);
       return sortDir === 'asc' ? cmp : -cmp;
     });
     // Apply search filter
@@ -378,7 +378,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
   const toggleType = (tid: number) =>
     setFilters(prev => {
       const next = new Set(prev.types);
-      next.has(tid) ? next.delete(tid) : next.add(tid);
+      if (next.has(tid)) { next.delete(tid); } else { next.add(tid); }
       return { ...prev, types: next };
     });
 
@@ -1669,7 +1669,7 @@ function MoveFlagsDropdown({
                   style={{ margin: 0, cursor: 'pointer' }}
                   onChange={e => {
                     const next = new Set(excludedFlags);
-                    e.target.checked ? next.delete(flag) : next.add(flag);
+                    if (e.target.checked) { next.delete(flag); } else { next.add(flag); }
                     onChange(next);
                   }}
                 />
@@ -1760,7 +1760,7 @@ function ExcludeFormsDropdown({
                   style={{ margin: 0, cursor: 'pointer' }}
                   onChange={e => {
                     const next = new Set(excludedForms);
-                    e.target.checked ? next.add(key) : next.delete(key);
+                    if (e.target.checked) { next.add(key); } else { next.delete(key); }
                     onChange(next);
                   }}
                 />

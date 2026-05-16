@@ -324,7 +324,7 @@ export default function App() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const saved: SavedSlot[] = JSON.parse(raw);
+        const saved = JSON.parse(raw) as unknown as SavedSlot[];
         if (Array.isArray(saved) && saved.length > 0) {
           const restored = saved.map(s => {
             const pkmn = s.pokemonId != null ? (data.pokemon.get(s.pokemonId) ?? null) : null;
@@ -899,12 +899,12 @@ export default function App() {
                       transition: 'border-color 0.15s, color 0.15s',
                     }}
                     onMouseEnter={e => {
-                      (e.currentTarget as HTMLButtonElement).style.borderColor = '#e53e3e';
-                      (e.currentTarget as HTMLButtonElement).style.color = '#e53e3e';
+                      (e.currentTarget).style.borderColor = '#e53e3e';
+                      (e.currentTarget).style.color = '#e53e3e';
                     }}
                     onMouseLeave={e => {
-                      (e.currentTarget as HTMLButtonElement).style.borderColor = '#ddd';
-                      (e.currentTarget as HTMLButtonElement).style.color = '#bbb';
+                      (e.currentTarget).style.borderColor = '#ddd';
+                      (e.currentTarget).style.color = '#bbb';
                     }}
                   >
                     <span style={{ fontSize: '24px', lineHeight: 1 }}>+</span>
