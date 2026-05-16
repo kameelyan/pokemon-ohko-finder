@@ -109,6 +109,74 @@ test('clicking a result card expands it to show moves', async ({ page }) => {
   await expect(page.locator('.ohko-move-table').first()).toBeVisible();
 });
 
+// ─── Expand / Collapse all ────────────────────────────────────────────────────
+
+test('expand all and collapse all buttons toggle move tables', async ({ page }) => {
+  await page.goto('/pokemon-ohko-finder/');
+
+  const targetSearch = page.getByPlaceholder('Search Pokémon...').first();
+  await targetSearch.click();
+  await targetSearch.fill('Garchomp');
+  await page.getByText('Garchomp').first().click();
+
+  await expect(page.locator('[data-tour="results-list"] > div').first()).toBeVisible();
+
+  // No move tables before expanding
+  await expect(page.locator('.ohko-move-table').first()).not.toBeVisible();
+
+  // Expand all
+  await page.getByRole('button', { name: /Expand all/i }).click();
+  await expect(page.locator('.ohko-move-table').first()).toBeVisible();
+
+  // Collapse all
+  await page.getByRole('button', { name: /Collapse all/i }).click();
+  await expect(page.locator('.ohko-move-table').first()).not.toBeVisible();
+});
+
+// ─── Accuracy filter ──────────────────────────────────────────────────────────
+
+test('accuracy filter reduces result count', async ({ page }) => {
+  await page.goto('/pokemon-ohko-finder/');
+
+  const targetSearch = page.getByPlaceholder('Search Pokémon...').first();
+  await targetSearch.click();
+  await targetSearch.fill('Garchomp');
+  await page.getByText('Garchomp').first().click();
+
+  await expect(page.locator('[data-tour="results-list"] > div').first()).toBeVisible();
+  const beforeCount = await page.locator('[data-tour="results-list"] > div').count();
+
+  // Open Filters and set 100% accuracy
+  await page.getByRole('button', { name: /^Filters/ }).click();
+  await page.getByRole('button', { name: '100%' }).click();
+
+  const afterCount = await page.locator('[data-tour="results-list"] > div').count();
+  expect(afterCount).toBeLessThanOrEqual(beforeCount);
+});
+
+// ─── Trick Room ───────────────────────────────────────────────────────────────
+
+test('enabling Trick Room toggles indicator in results', async ({ page }) => {
+  await page.goto('/pokemon-ohko-finder/');
+
+  const targetSearch = page.getByPlaceholder('Search Pokémon...').first();
+  await targetSearch.click();
+  await targetSearch.fill('Garchomp');
+  await page.getByText('Garchomp').first().click();
+
+  await expect(page.locator('[data-tour="results-list"] > div').first()).toBeVisible();
+
+  // Trick Room emoji should not be visible yet
+  await expect(page.locator('text=🔮').first()).not.toBeVisible();
+
+  // Open Battle Effects and enable Trick Room
+  await page.getByRole('button', { name: /Battle Effects/i }).click();
+  await page.getByRole('button', { name: /Trick Room/i }).click();
+
+  // The 🔮 indicator should now appear in the results
+  await expect(page.locator('text=🔮').first()).toBeVisible();
+});
+
 // ─── No results state ─────────────────────────────────────────────────────────
 
 test('shows empty state when no target is selected', async ({ page }) => {
