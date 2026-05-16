@@ -5,6 +5,19 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.12.1',
+    date: 'May 2026',
+    title: 'Bug Fixes',
+    sections: [
+      {
+        heading: '🐛 Bug Fixes',
+        items: [
+          'Gravity now correctly suppresses Levitate — Ground-type moves can hit Levitate Pokémon when Gravity is active, matching in-game behaviour.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.12.0',
     date: 'May 2026',
     title: 'Attacker Nature Variants',
