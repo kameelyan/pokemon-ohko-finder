@@ -70,6 +70,8 @@ export interface TargetConfig {
   defStage?: number;
   /** Active Sp. Defense stat stage for this target (−6 to +6). */
   spdStage?: number;
+  /** The ability the target is using — applied as a defensive modifier in damage calculations. */
+  selectedAbilityIdentifier?: string;
 }
 
 export interface TargetHeldItem {
@@ -253,6 +255,8 @@ export interface OHKOMoveInfo {
   evNeeded: number;
   item?: HeldItem;
   abilityMod?: { identifier: string; name: string; isHidden: boolean };
+  /** Defensive ability of the target that modified the damage for this OHKO. */
+  defAbility?: { identifier: string; name: string; mult: number };
   /** Weather condition that was required for this OHKO (absent = works without weather). */
   weatherRequired?: Exclude<Weather, 'none'>;
   /** For Foul Play only: the target's Attack stat that was used in the damage calculation. */
@@ -373,6 +377,7 @@ interface TargetStats {
   atkStage: number;
   defStage: number;
   spdStage: number;
+  selectedAbilityIdentifier?: string;
 }
 
 interface OHKOAttempt {
@@ -384,6 +389,55 @@ interface OHKOAttempt {
   maxDmg: number;
   adjAccuracy: number | null;
   needsRoundBoost?: boolean;
+  defAbility?: { identifier: string; name: string; mult: number };
+}
+
+/**
+ * Returns whether a target's ability causes immunity or a damage multiplier
+ * for the given move. Returns { immune: true } if the move is blocked entirely,
+ * or { immune: false, mult } where mult ≠ 1.0 if the damage is modified.
+ */
+function applyTargetAbility(
+  identifier: string,
+  effectiveTypeId: number,
+  _effFactor: number,
+  isPhysical: boolean,
+  isContact: boolean,
+  isSound: boolean,
+): { immune: boolean; mult: number } {
+  const none = { immune: false, mult: 1.0 };
+  switch (identifier) {
+    // ── Full immunities ────────────────────────────────────────────────────
+    case 'levitate':       return effectiveTypeId === 5  ? { immune: true, mult: 0 } : none; // Ground
+    case 'flash-fire':     return effectiveTypeId === 10 ? { immune: true, mult: 0 } : none; // Fire
+    case 'water-absorb':
+    case 'dry-skin':       return effectiveTypeId === 11 ? { immune: true, mult: 0 } : none; // Water
+    case 'volt-absorb':
+    case 'motor-drive':
+    case 'lightning-rod':  return effectiveTypeId === 13 ? { immune: true, mult: 0 } : none; // Electric
+    case 'sap-sipper':     return effectiveTypeId === 12 ? { immune: true, mult: 0 } : none; // Grass
+    case 'earth-eater':    return effectiveTypeId === 5  ? { immune: true, mult: 0 } : none; // Ground
+    case 'storm-drain':    return effectiveTypeId === 11 ? { immune: true, mult: 0 } : none; // Water (redirects)
+    case 'soundproof':     return isSound ? { immune: true, mult: 0 } : none;
+    case 'bulletproof':    return none; // handled by ballistics flag — not tracked here since we don't filter ballistics moves
+    // ── Damage reductions ─────────────────────────────────────────────────
+    case 'multiscale':
+    case 'shadow-shield':  return { immune: false, mult: 0.5 }; // at full HP — we always apply it conservatively
+    case 'thick-fat':      return (effectiveTypeId === 10 || effectiveTypeId === 15) ? { immune: false, mult: 0.5 } : none; // Fire/Ice
+    case 'filter':
+    case 'solid-rock':
+    case 'prism-armor':    return _effFactor > 100 ? { immune: false, mult: 0.75 } : none; // reduces super-effective damage
+    case 'ice-scales':     return isPhysical ? none : { immune: false, mult: 0.5 }; // halves special damage
+    case 'fluffy':
+      if (isContact) return { immune: false, mult: 0.5 };
+      if (effectiveTypeId === 10) return { immune: false, mult: 2.0 }; // Fire amplified
+      return none;
+    case 'punk-rock':      return isSound ? { immune: false, mult: 0.5 } : none; // halves incoming sound moves
+    case 'heatproof':      return effectiveTypeId === 10 ? { immune: false, mult: 0.5 } : none; // Fire
+    case 'water-bubble':   return effectiveTypeId === 10 ? { immune: false, mult: 0.5 } : none; // Fire halved
+    case 'purifying-salt': return effectiveTypeId === 8  ? { immune: false, mult: 0.5 } : none; // Ghost
+    default: return none;
+  }
 }
 
 function tryOHKO(
@@ -426,8 +480,26 @@ function tryOHKO(
   if (berry) effFactor = Math.floor(effFactor * berry.mult);
 
   const isPhysical = move.damageClassId === 2;
+  const isContact  = move.flags.includes('contact');
+  const isSound    = move.flags.includes('sound');
   // Psyshock/Psystrike/Secret Sword: Special moves that hit the target's Defense, not Sp. Def
   const isPsyshock = PSYSHOCK_MOVE_IDS.has(move.id);
+
+  // Apply the target's selected defensive ability
+  let defAbilityMult = 1.0;
+  let defAbility: { identifier: string; name: string; mult: number } | undefined;
+  if (ts.selectedAbilityIdentifier) {
+    const da = ts.pokemon.abilities.find(a => a.identifier === ts.selectedAbilityIdentifier);
+    if (da) {
+      const effect = applyTargetAbility(da.identifier, effectiveTypeId, effFactor, isPhysical, isContact, isSound);
+      if (effect.immune) return null;
+      if (effect.mult !== 1.0) {
+        defAbilityMult = effect.mult;
+        defAbility = { identifier: da.identifier, name: da.name, mult: effect.mult };
+      }
+    }
+  }
+
   const rawDef = (isPhysical || isPsyshock) ? ts.def : ts.spd;
   const targetStageMult = (isPhysical || isPsyshock) ? stageMult(ts.defStage) : stageMult(ts.spdStage);
   const statMult = (isPhysical || isPsyshock) ? ts.defMult : ts.spdMult;
@@ -466,7 +538,7 @@ function tryOHKO(
   const spreadMult = (isDoubles && move.isSpread) ? 0.75 : 1.0;
   // Friend Guard (doubles only): adjacent ally reduces all incoming damage by ×0.75
   const friendGuardMult = ts.friendGuard ? 0.75 : 1.0;
-  const effectivePower = move.power * (abilityMod?.powerMult ?? 1.0) * weatherMult * terrainMult * fairyAuraMult * spreadMult * friendGuardMult;
+  const effectivePower = move.power * (abilityMod?.powerMult ?? 1.0) * weatherMult * terrainMult * fairyAuraMult * spreadMult * friendGuardMult * defAbilityMult;
   let activePower = effectivePower; // may be doubled for Round
   let needsRoundBoost = false;
 
@@ -516,7 +588,7 @@ function tryOHKO(
   const atkStat = isFoulPlay ? ts.atk : Math.floor(calcStat(atkBase, evNeeded, 31, 50, 1.0) * atkTotalMult);
   const { min, max } = damageSingle(activePower, atkStat, defStat, stabFactor, effFactor, item?.boost ?? 1.0);
 
-  return { evNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy, needsRoundBoost };
+  return { evNeeded, item, stab, effFactor, minDmg: min, maxDmg: max, adjAccuracy, needsRoundBoost, defAbility };
 }
 
 export function findPokemonOHKOs(
@@ -557,6 +629,7 @@ export function findPokemonOHKOs(
     atkStage: t.atkStage ?? 0,
     defStage: t.defStage ?? 0,
     spdStage: t.spdStage ?? 0,
+    selectedAbilityIdentifier: t.selectedAbilityIdentifier,
   }));
 
   const results: PokemonOHKOResult[] = [];
@@ -655,6 +728,7 @@ export function findPokemonOHKOs(
           evNeeded: chosen.evNeeded,
           item: chosen.item,
           abilityMod: abilityRequired,
+          defAbility: chosen.defAbility,
           weatherRequired,
           foulPlayAtk: move.id === FOUL_PLAY_MOVE_ID ? Math.floor(ts.atk * stageMult(ts.atkStage)) : undefined,
           needsRoundBoost: chosen.needsRoundBoost,

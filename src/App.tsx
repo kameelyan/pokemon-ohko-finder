@@ -108,6 +108,7 @@ interface TargetSlot {
   defStage: number;     // −6 to +6
   spdStage: number;     // −6 to +6
   speStage: number;     // −6 to +6 (affects outspeed comparisons)
+  ability: string | null; // selected defensive ability identifier
 }
 
 /** Shape written to / read from localStorage (no full Pokemon object). */
@@ -125,11 +126,12 @@ interface SavedSlot {
   defStage?: number;
   spdStage?: number;
   speStage?: number;
+  abilityIdentifier?: string;
 }
 
 let nextId = 1;
 function makeSlot(): TargetSlot {
-  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false, heldItem: null, reflect: false, lightScreen: false, nature: 'Neutral', tailwind: false, friendGuard: false, atkStage: 0, defStage: 0, spdStage: 0, speStage: 0 };
+  return { id: nextId++, pokemon: null, evs: { ...DEFAULT_EVS }, mustOutspeed: false, heldItem: null, reflect: false, lightScreen: false, nature: 'Neutral', tailwind: false, friendGuard: false, atkStage: 0, defStage: 0, spdStage: 0, speStage: 0, ability: null };
 }
 
 export default function App() {
@@ -176,22 +178,26 @@ export default function App() {
       if (raw) {
         const saved: SavedSlot[] = JSON.parse(raw);
         if (Array.isArray(saved) && saved.length > 0) {
-          const restored = saved.map(s => ({
-            id: nextId++,
-            pokemon: s.pokemonId != null ? (data.pokemon.get(s.pokemonId) ?? null) : null,
-            evs: { ...DEFAULT_EVS, ...s.evs },
-            mustOutspeed: s.mustOutspeed ?? false,
-            heldItem: TARGET_HELD_ITEMS.find(i => i.identifier === s.heldItemIdentifier) ?? null,
-            reflect: s.reflect ?? false,
-            lightScreen: s.lightScreen ?? false,
-            nature: s.nature ?? 'Neutral',
-            tailwind: s.tailwind ?? false,
-            friendGuard: s.friendGuard ?? false,
-            atkStage: s.atkStage ?? 0,
-            defStage: s.defStage ?? 0,
-            spdStage: s.spdStage ?? 0,
-            speStage: s.speStage ?? 0,
-          }));
+          const restored = saved.map(s => {
+            const pkmn = s.pokemonId != null ? (data.pokemon.get(s.pokemonId) ?? null) : null;
+            return {
+              id: nextId++,
+              pokemon: pkmn,
+              evs: { ...DEFAULT_EVS, ...s.evs },
+              mustOutspeed: s.mustOutspeed ?? false,
+              heldItem: TARGET_HELD_ITEMS.find(i => i.identifier === s.heldItemIdentifier) ?? null,
+              reflect: s.reflect ?? false,
+              lightScreen: s.lightScreen ?? false,
+              nature: s.nature ?? 'Neutral',
+              tailwind: s.tailwind ?? false,
+              friendGuard: s.friendGuard ?? false,
+              atkStage: s.atkStage ?? 0,
+              defStage: s.defStage ?? 0,
+              spdStage: s.spdStage ?? 0,
+              speStage: s.speStage ?? 0,
+              ability: s.abilityIdentifier ?? (pkmn?.abilities[0]?.identifier ?? null),
+            };
+          });
           restoredRef.current = true; // open gate before setSlots so the next save is correct
           setSlots(restored);
           return;
@@ -218,6 +224,7 @@ export default function App() {
       defStage: s.defStage,
       spdStage: s.spdStage,
       speStage: s.speStage,
+      abilityIdentifier: s.ability ?? undefined,
     }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   }, [slots]);
@@ -255,16 +262,17 @@ export default function App() {
         pokemon: s.pokemon!,
         evs,
         heldItem: s.heldItem ?? undefined,
-      reflect: s.reflect,
-      lightScreen: s.lightScreen,
-      atkNature: getNatureMult(s.nature, 'atk'),
-      defNature: getNatureMult(s.nature, 'def'),
-      spdNature: getNatureMult(s.nature, 'spd'),
-      speNature: getNatureMult(s.nature, 'spe'),
-      friendGuard: isDoubles ? s.friendGuard : false,
-      atkStage: s.atkStage,
-      defStage: s.defStage,
-      spdStage: s.spdStage,
+        reflect: s.reflect,
+        lightScreen: s.lightScreen,
+        atkNature: getNatureMult(s.nature, 'atk'),
+        defNature: getNatureMult(s.nature, 'def'),
+        spdNature: getNatureMult(s.nature, 'spd'),
+        speNature: getNatureMult(s.nature, 'spe'),
+        friendGuard: isDoubles ? s.friendGuard : false,
+        atkStage: s.atkStage,
+        defStage: s.defStage,
+        spdStage: s.spdStage,
+        selectedAbilityIdentifier: s.ability ?? undefined,
       };
     });
 
@@ -668,7 +676,7 @@ export default function App() {
                     reflect={slot.reflect}
                     lightScreen={slot.lightScreen}
                     nature={slot.nature}
-                    onSelect={p => updateSlot(slot.id, { pokemon: p, evs: { ...DEFAULT_EVS } })}
+                    onSelect={p => updateSlot(slot.id, { pokemon: p, evs: { ...DEFAULT_EVS }, ability: p.abilities[0]?.identifier ?? null })}
                     onRemove={slots.length > 1 ? () => removeSlot(slot.id) : undefined}
                     onEvsChange={evs => updateSlot(slot.id, { evs })}
                     onMustOutspeedChange={v => updateSlot(slot.id, { mustOutspeed: v })}
@@ -688,6 +696,8 @@ export default function App() {
                     onSpdStageChange={v => updateSlot(slot.id, { spdStage: v })}
                     speStage={slot.speStage}
                     onSpeStageChange={v => updateSlot(slot.id, { speStage: v })}
+                    ability={slot.ability}
+                    onAbilityChange={id => updateSlot(slot.id, { ability: id })}
                     isDoubles={isDoubles}
                     data={data!}
                     statMode={statMode}
@@ -828,7 +838,7 @@ const HELD_ITEM_GROUPS: { label: string; items: typeof TARGET_HELD_ITEMS }[] = [
   },
 ];
 
-function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, reflect, lightScreen, nature, tailwind, onTailwindChange, friendGuard, onFriendGuardChange, atkStage, onAtkStageChange, defStage, onDefStageChange, spdStage, onSpdStageChange, speStage, onSpeStageChange, isDoubles, onSelect, onRemove, onEvsChange, onMustOutspeedChange, onHeldItemChange, onReflectChange, onLightScreenChange, onNatureChange, data, statMode }: {
+function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, reflect, lightScreen, nature, tailwind, onTailwindChange, friendGuard, onFriendGuardChange, atkStage, onAtkStageChange, defStage, onDefStageChange, spdStage, onSpdStageChange, speStage, onSpeStageChange, ability, onAbilityChange, isDoubles, onSelect, onRemove, onEvsChange, onMustOutspeedChange, onHeldItemChange, onReflectChange, onLightScreenChange, onNatureChange, data, statMode }: {
   label: string;
   pokemon: Pokemon[];
   selected: Pokemon | null;
@@ -850,6 +860,8 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
   onSpdStageChange: (v: number) => void;
   speStage: number;
   onSpeStageChange: (v: number) => void;
+  ability: string | null;
+  onAbilityChange: (id: string) => void;
   isDoubles: boolean;
   onSelect: (p: Pokemon) => void;
   onRemove?: () => void;
@@ -923,6 +935,38 @@ function TargetPanel({ label, pokemon, selected, evs, mustOutspeed, heldItem, re
               </div>
             </div>
           </div>
+
+          {/* Ability selector */}
+          {selected.abilities.length > 0 && (
+            <div style={{ marginBottom: '8px' }}>
+              <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Ability
+              </div>
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                {selected.abilities.map(ab => {
+                  const isSelected = ability === ab.identifier;
+                  return (
+                    <button
+                      key={ab.identifier}
+                      onClick={() => onAbilityChange(ab.identifier)}
+                      style={{
+                        fontSize: '11px', padding: '2px 8px',
+                        borderRadius: '4px', cursor: 'pointer',
+                        border: isSelected ? '1px solid #553c9a' : '1px solid #ddd',
+                        background: isSelected ? '#553c9a' : '#fff',
+                        color: isSelected ? '#fff' : '#666',
+                        fontWeight: isSelected ? 700 : 400,
+                        transition: 'all 0.12s',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {ab.name}{ab.isHidden ? ' (H)' : ''}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div style={{ display: 'flex', columnGap: '6px', rowGap: '10px', flexWrap: 'wrap', marginBottom: '8px', fontSize: '11px' }}>
             <StatPill label="HP" base={selected.stats.hp} computed={hp} tooltip={
