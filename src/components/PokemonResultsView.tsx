@@ -90,6 +90,8 @@ interface Props {
   onWeatherChange: (w: Weather) => void;
   gravity: boolean;
   onGravityChange: (v: boolean) => void;
+  trickRoom: boolean;
+  onTrickRoomChange: (v: boolean) => void;
   terrain: Terrain;
   onTerrainChange: (t: Terrain) => void;
   fairyAura: boolean;
@@ -187,7 +189,6 @@ interface Filters {
   minSpe: string;
   maxSpe: string;
   outspeed: OutspeedFilter;
-  trickRoom: boolean;
   category: CategoryFilter;
   noEvs: boolean;
   noItem: boolean;
@@ -201,7 +202,6 @@ const EMPTY_FILTERS: Filters = {
   minSpe: '',
   maxSpe: '',
   outspeed: 'any',
-  trickRoom: false,
   category: 'all',
   noEvs: false,
   noItem: false,
@@ -216,7 +216,6 @@ function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boole
     (f.minSpe !== '' ? 1 : 0) +
     (f.maxSpe !== '' ? 1 : 0) +
     (f.outspeed !== 'any' ? 1 : 0) +
-    (f.trickRoom ? 1 : 0) +
     (f.category !== 'all' ? 1 : 0) +
     (f.noEvs ? 1 : 0) +
     (f.noItem ? 1 : 0) +
@@ -244,7 +243,7 @@ function minSpeedEVs(baseSpe: number, targetSpeed: number, natureMult: number, a
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export default function PokemonResultsView({ title, results, targetNames, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, gravity, onGravityChange, terrain, onTerrainChange, fairyAura, onFairyAuraChange, atkStage, onAtkStageChange, spaStage, onSpaStageChange, atkDefStage, onAtkDefStageChange, atkSpeStage, onAtkSpeStageChange, choiceItem, onChoiceItemChange, isDoubles, statMode, hasTargets }: Props) {
+export default function PokemonResultsView({ title, results, targetNames, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly, data, showPossible, onShowPossibleChange, minAccuracy, onMinAccuracyChange, weather, onWeatherChange, gravity, onGravityChange, trickRoom, onTrickRoomChange, terrain, onTerrainChange, fairyAura, onFairyAuraChange, atkStage, onAtkStageChange, spaStage, onSpaStageChange, atkDefStage, onAtkDefStageChange, atkSpeStage, onAtkSpeStageChange, choiceItem, onChoiceItemChange, isDoubles, statMode, hasTargets }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -280,13 +279,13 @@ export default function PokemonResultsView({ title, results, targetNames, target
       if (filters.maxSpe !== '' && spe > Number(filters.maxSpe)) return false;
 
       // In Trick Room slower = first, so the comparison flips
-      const movesFirst = (a: number, t: number) => filters.trickRoom ? a < t : a > t;
+      const movesFirst = (a: number, t: number) => trickRoom ? a < t : a > t;
 
       if (targetSpeeds.length > 0 && filters.outspeed !== 'any') {
         // "Faster than all" — use max potential speed in normal mode so we include
         // Pokémon that could outspeed with EV/nature investment.
         if (filters.outspeed === 'all') {
-          const speCheck = filters.trickRoom ? spe : maxSpe;
+          const speCheck = trickRoom ? spe : maxSpe;
           if (!targetSpeeds.every(ts => movesFirst(speCheck, ts))) return false;
         }
         if (filters.outspeed === 'none' && targetSpeeds.some(ts => movesFirst(spe, ts))) return false;
@@ -295,7 +294,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
       // Per-target must-outspeed constraints — in non-TR show anything that COULD
       // outspeed at max investment; in TR keep the uninvested check.
       if (mustOutspeedSpeeds.length > 0) {
-        const speCheck = filters.trickRoom ? spe : maxSpe;
+        const speCheck = trickRoom ? spe : maxSpe;
         if (!mustOutspeedSpeeds.every(ts => movesFirst(speCheck, ts))) return false;
       }
 
@@ -309,7 +308,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
       const isMega = r.pokemon.identifier.includes('-mega') || r.pokemon.identifier.includes('-primal');
       // Mega and Primal Pokémon hold their Mega Stone / Orb and can't use a Choice item
       if (choiceItem !== null && isMega) return false;
-      if ((filters.noItem || isMega) && !r.movesPerTarget.every(moves => moves.some(m => !m.item))) return false;
+      if ((filters.noItem || isMega || choiceItem !== null) && !r.movesPerTarget.every(moves => moves.some(m => !m.item))) return false;
       if (filters.defaultOnly && !r.pokemon.isDefault) return false;
       if (filters.excludedForms.size > 0 && !r.pokemon.isDefault) {
         const fc = getFormCategory(r.pokemon.identifier, r.pokemon.isDefault);
@@ -333,7 +332,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
 
       return true;
     });
-  }, [results, filters, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly]);
+  }, [results, filters, choiceItem, trickRoom, atkSpeStage, targetSpeeds, mustOutspeedSpeeds, targetsMustOutspeed, championsOnly, data]);
 
   const sortedResults = useMemo(() => {
     const arr = [...filteredResults];
@@ -480,6 +479,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
             onFairyAuraChange={onFairyAuraChange}
             gravity={gravity}
             onGravityChange={onGravityChange}
+            trickRoom={trickRoom}
+            onTrickRoomChange={onTrickRoomChange}
           />
           <button
             onClick={() => setFiltersOpen(v => !v)}
@@ -576,29 +577,12 @@ export default function PokemonResultsView({ title, results, targetNames, target
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <div style={filterLabel}>Outspeed Targets</div>
-                {/* Trick Room toggle — lives right next to the outspeed label */}
-                <button
-                  onClick={() => setFilter('trickRoom', !filters.trickRoom)}
-                  disabled={targetSpeeds.length === 0}
-                  title="Trick Room: reverses speed order — slower Pokémon move first"
-                  style={{
-                    ...toggleBtnStyle,
-                    fontSize: '11px',
-                    padding: '2px 8px',
-                    background: filters.trickRoom ? '#553c9a' : '#fff',
-                    color: filters.trickRoom ? '#fff' : '#7c3aed',
-                    borderColor: filters.trickRoom ? '#553c9a' : '#c4b5fd',
-                    fontWeight: 700,
-                  }}
-                >
-                  🔮 Trick Room
-                </button>
               </div>
               <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
                 {([
                   ['any', 'Any'],
-                  ['all', filters.trickRoom ? 'Slower than all' : 'Faster than all'],
-                  ['none', filters.trickRoom ? 'Faster than all' : 'Slower than all'],
+                  ['all', trickRoom ? 'Slower than all' : 'Faster than all'],
+                  ['none', trickRoom ? 'Faster than all' : 'Slower than all'],
                 ] as [OutspeedFilter, string][]).map(([val, label]) => (
                   <button
                     key={val}
@@ -768,9 +752,10 @@ export default function PokemonResultsView({ title, results, targetNames, target
           const moveCounts = movesPerTarget.map((moves, ti) => {
             // Apply the same filters as MoveTable so the count matches what's displayed
             const visible = moves.filter(m =>
-              (!filters.noItem || !m.item) &&
-              (!filters.noEvs  || m.evNeeded === 0) &&
-              (!isMega         || !m.item) &&
+              (!filters.noItem       || !m.item) &&
+              (!filters.noEvs        || m.evNeeded === 0) &&
+              (!isMega               || !m.item) &&
+              (choiceItem === null    || !m.item) &&
               (!targetsMustOutspeed[ti] || m.move.priority >= 0)
             );
             return {
@@ -839,7 +824,6 @@ export default function PokemonResultsView({ title, results, targetNames, target
                     {typeNames.map(t => <TypeBadge key={t} typeName={t} />)}
                   </div>
 
-                  {/* Atk chip */}
                   {/* Atk chip */}
                   {(() => {
                     const uninvestedAtk = calcStat(pokemon.stats.atk, 0);
@@ -937,7 +921,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
                     content={
                       <div>
                         <div style={{ fontWeight: 700, marginBottom: '7px' }}>
-                          Speed (uninvested L50){filters.trickRoom && <span style={{ marginLeft: '6px', color: '#b794f4', fontSize: '10px' }}>🔮 Trick Room</span>}
+                          Speed (uninvested L50){trickRoom && <span style={{ marginLeft: '6px', color: '#b794f4', fontSize: '10px' }}>🔮 Trick Room</span>}
                         </div>
                         <div style={{ color: '#ccc', marginBottom: '2px', fontSize: '11px' }}>Base: {pokemon.stats.spe} · {statMode === 'sp' ? 'SPs: 0' : 'EVs: 0'} · IVs: 31</div>
                         <div style={{ color: '#68d391', fontWeight: 700, marginBottom: speModified ? '2px' : '7px' }}>→ {uninvestedSpe} Speed</div>
@@ -952,7 +936,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
                           </div>
                         )}
                         {targetSpeeds.map((ts, i) => {
-                          const attackerGoesFirst = filters.trickRoom ? attackerSpe < ts : attackerSpe > ts;
+                          const attackerGoesFirst = trickRoom ? attackerSpe < ts : attackerSpe > ts;
                           const tied = attackerSpe === ts;
                           return (
                             <div key={i} style={{ marginBottom: '5px' }}>
@@ -986,23 +970,23 @@ export default function PokemonResultsView({ title, results, targetNames, target
                     maxWidth={220}
                   >
                     <span style={{
-                      background: hasScarf ? '#fffaf0' : filters.trickRoom ? '#f3f0ff' : '#f0f0f0',
-                      border: hasScarf ? '1px solid #f6ad55' : filters.trickRoom ? '1px solid #c4b5fd' : '1px solid transparent',
+                      background: hasScarf ? '#fffaf0' : trickRoom ? '#f3f0ff' : '#f0f0f0',
+                      border: hasScarf ? '1px solid #f6ad55' : trickRoom ? '1px solid #c4b5fd' : '1px solid transparent',
                       borderRadius: '5px', padding: '2px 7px',
                       fontSize: '12px', fontWeight: 600, cursor: 'help',
                       display: 'inline-flex', alignItems: 'center', gap: '4px',
                     }}>
-                      {filters.trickRoom && <span style={{ fontSize: '10px' }}>🔮</span>}
+                      {trickRoom && <span style={{ fontSize: '10px' }}>🔮</span>}
                       Spe <span style={{ color: '#333' }}>{pokemon.stats.spe}</span>
                       {speModified && (
                         <span style={{ color: '#999', fontWeight: 400 }}>({attackerSpe})</span>
                       )}
                       {targetSpeeds.length > 0 && (() => {
                         // "good" = moves first = faster normally, slower in TR
-                        const allGood = filters.trickRoom
+                        const allGood = trickRoom
                           ? targetSpeeds.every(ts => attackerSpe < ts)
                           : targetSpeeds.every(ts => attackerSpe > ts);
-                        const allBad = filters.trickRoom
+                        const allBad = trickRoom
                           ? targetSpeeds.every(ts => attackerSpe > ts)
                           : targetSpeeds.every(ts => attackerSpe < ts);
                         const allTied = targetSpeeds.every(ts => attackerSpe === ts);
@@ -1017,7 +1001,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
                   })()}
 
                   {/* Speed investment chip — only in normal (non-TR) mode with targets */}
-                  {targetSpeeds.length > 0 && !filters.trickRoom && (() => {
+                  {targetSpeeds.length > 0 && !trickRoom && (() => {
                     const worstTarget = Math.max(...targetSpeeds);
                     // Already outspeeds at 0 EVs neutral → no chip
                     if (attackerSpe > worstTarget) return null;
@@ -1185,9 +1169,10 @@ export default function PokemonResultsView({ title, results, targetNames, target
                       </div>
                       <MoveTable
                         moves={moves.filter(m =>
-                          (!filters.noItem || !m.item) &&
-                          (!filters.noEvs  || m.evNeeded === 0) &&
-                          (!isMega         || !m.item) &&
+                          (!filters.noItem    || !m.item) &&
+                          (!filters.noEvs     || m.evNeeded === 0) &&
+                          (!isMega            || !m.item) &&
+                          (choiceItem === null || !m.item) &&
                           (!targetsMustOutspeed[ti] || m.move.priority >= 0)
                         )}
                         data={data}
@@ -1383,6 +1368,28 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                       </span>
                     </Tooltip>
                   )}
+                  {/* Going-second chip — Avalanche, Revenge, Payback at ×2 power */}
+                  {m.needsGoingSecond && (
+                    <Tooltip
+                      content={
+                        m.move.priority < 0
+                          ? `${m.move.name} has negative priority and almost always moves last. Calculated at ×2 power (assumes the user was hit before attacking this turn).`
+                          : `${m.move.name} doubles in power if the user moves after the target. Calculated at ×2 power (assumes the target has already moved this turn).`
+                      }
+                      side="bottom"
+                      maxWidth={260}
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#ebf8ff', color: '#2b6cb0',
+                        border: '1px solid #90cdf4',
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        ⬇ Goes 2nd
+                      </span>
+                    </Tooltip>
+                  )}
                   {/* Round double-power chip */}
                   {m.move.id === ROUND_MOVE_ID && m.needsRoundBoost && (
                     <Tooltip
@@ -1414,6 +1421,26 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                         whiteSpace: 'nowrap',
                       }}>
                         ★ {m.abilityMod.name}
+                      </span>
+                    </Tooltip>
+                  )}
+                  {/* Nature chip — shown when a +Atk or +SpA nature is required */}
+                  {m.nature && (
+                    <Tooltip
+                      content={m.nature === '+atk'
+                        ? 'Requires a +Atk nature (e.g. Adamant) — physical moves ×1.1'
+                        : 'Requires a +SpA nature (e.g. Modest) — special moves ×1.1'}
+                      side="bottom"
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: m.nature === '+atk' ? '#fff5f5' : '#faf5ff',
+                        color: m.nature === '+atk' ? '#c53030' : '#553c9a',
+                        border: `1px solid ${m.nature === '+atk' ? '#feb2b2' : '#d6bcfa'}`,
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {m.nature === '+atk' ? '+Atk' : '+SpA'} nature
                       </span>
                     </Tooltip>
                   )}
@@ -1872,6 +1899,7 @@ function StatChangesDropdown({
               })}
             </div>
           </div>
+
         </div>
       )}
     </div>
@@ -1885,6 +1913,7 @@ function BattlegroundDropdown({
   terrain, onTerrainChange,
   fairyAura, onFairyAuraChange,
   gravity, onGravityChange,
+  trickRoom, onTrickRoomChange,
 }: {
   weather: Weather;
   onWeatherChange: (w: Weather) => void;
@@ -1894,6 +1923,8 @@ function BattlegroundDropdown({
   onFairyAuraChange: (v: boolean) => void;
   gravity: boolean;
   onGravityChange: (v: boolean) => void;
+  trickRoom: boolean;
+  onTrickRoomChange: (v: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -1907,7 +1938,7 @@ function BattlegroundDropdown({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const activeCount = (weather !== 'none' ? 1 : 0) + (terrain !== 'none' ? 1 : 0) + (fairyAura ? 1 : 0) + (gravity ? 1 : 0);
+  const activeCount = (weather !== 'none' ? 1 : 0) + (terrain !== 'none' ? 1 : 0) + (fairyAura ? 1 : 0) + (gravity ? 1 : 0) + (trickRoom ? 1 : 0);
 
   const TERRAINS: { key: Terrain; label: string; icon: string }[] = [
     { key: 'none',     label: 'None',     icon: ''   },
@@ -1937,7 +1968,7 @@ function BattlegroundDropdown({
         {activeCount > 0 && (
           <Tooltip content="Clear all battle effects" side="top">
             <span
-              onClick={e => { e.stopPropagation(); onWeatherChange('none'); onTerrainChange('none'); onFairyAuraChange(false); onGravityChange(false); }}
+              onClick={e => { e.stopPropagation(); onWeatherChange('none'); onTerrainChange('none'); onFairyAuraChange(false); onGravityChange(false); onTrickRoomChange(false); }}
               style={{ color: '#2b6cb0', fontWeight: 800, lineHeight: 1, padding: '0 2px' }}
             >✕</span>
           </Tooltip>
@@ -2077,6 +2108,24 @@ function BattlegroundDropdown({
                 }}
               >
                 ⬇ Gravity
+              </button>
+            </Tooltip>
+            <Tooltip
+              content="Trick Room — reverses speed priority for 5 turns. Slower Pokémon move first. Affects the Outspeed filter and speed comparison indicators in results."
+              side="bottom"
+              maxWidth={260}
+            >
+              <button
+                onClick={() => onTrickRoomChange(!trickRoom)}
+                style={{
+                  ...toggleBtnStyle,
+                  background: trickRoom ? '#553c9a' : '#fff',
+                  color: trickRoom ? '#fff' : '#7c3aed',
+                  borderColor: trickRoom ? '#553c9a' : '#c4b5fd',
+                  fontWeight: trickRoom ? 700 : 500,
+                }}
+              >
+                🔮 Trick Room
               </button>
             </Tooltip>
           </div>

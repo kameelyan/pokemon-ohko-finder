@@ -5,6 +5,35 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.12.0',
+    date: 'May 2026',
+    title: 'Attacker Nature Variants',
+    sections: [
+      {
+        heading: '🌿 Nature Variant Rows',
+        items: [
+          'Move rows now automatically show a nature variant when a +Atk nature (e.g. Adamant) or +SpA nature (e.g. Modest) would lower the EV investment needed to OHKO. The variant row appears only when it makes a meaningful difference.',
+          'Nature variant rows are labelled with an "+Atk nature" or "+SpA nature" chip. Foul Play and Body Press are correctly excluded since they use non-standard attack stats.',
+          'Within each move group, rows are ordered: nature variant → neutral → held item required.',
+        ],
+      },
+      {
+        heading: '⚔️ Calculation Improvements',
+        items: [
+          'Avalanche, Revenge, and Payback are now calculated at doubled power. These moves are only used when the condition is met (moving last / being hit first), so the doubled value is always the relevant figure. A "⬇ Goes 2nd" chip is shown on these rows.',
+          'When a Choice item is active, moves requiring a separate type-boosting held item (e.g. Never-Melt Ice) are now correctly hidden — a Pokémon can only hold one item.',
+          'Move rows within each attacker are now sorted alphabetically, making it easier to find a specific move at a glance.',
+        ],
+      },
+      {
+        heading: '🐛 Bug Fixes',
+        items: [
+          'Switching the Choice item on and off no longer causes extra moves to appear. Stale band-calc results were briefly shown without the band filter applied; the results are now cleared immediately whenever any setting changes.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.11.0',
     date: 'May 2026',
     title: 'Guided Tour',
