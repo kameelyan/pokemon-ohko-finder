@@ -5,6 +5,26 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.13.0',
+    date: 'May 2026',
+    title: 'Ability Tooltips & Sprite Fixes',
+    sections: [
+      {
+        heading: '✨ New',
+        items: [
+          'Hovering over an ability button in the target Pokémon panel now shows a tooltip with the ability\'s full description. Hidden abilities are labelled accordingly.',
+        ],
+      },
+      {
+        heading: '🐛 Bug Fixes',
+        items: [
+          'Sprite fallback now applies to the target Pokémon panel — high-ID alternate forms (e.g. Mega Froslass) correctly load the official artwork when the front sprite is unavailable.',
+          'Fixed Maushold weight data: family-of-four is 2.8 kg and family-of-three is 2.3 kg (were swapped).',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.12.2',
     date: 'May 2026',
     title: 'Weather Bug Fixes',
