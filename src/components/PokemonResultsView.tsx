@@ -442,7 +442,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
               minWidth: 0,
             }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} data-tour="sort-controls">
             <span style={{ fontSize: '11px', color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sort</span>
             <select
               value={sortKey}
@@ -470,7 +470,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
         </div>
 
         {/* Battle Effects + Filters + expand/collapse — far right */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }} data-tour="attacker-controls">
           <StatChangesDropdown
             atkStage={atkStage}
             onAtkStageChange={onAtkStageChange}
@@ -752,7 +752,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }} data-tour="results-list">
         {sortedResults.map(result => {
           const { pokemon, movesPerTarget, allGuaranteed } = result;
           const isMega = pokemon.identifier.includes('-mega');
