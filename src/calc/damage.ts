@@ -832,11 +832,20 @@ export function findPokemonOHKOs(
       }
     }
 
-    for (const moves of movesPerTarget) {
-      moves.sort((a, b) => {
+    for (let i = 0; i < movesPerTarget.length; i++) {
+      movesPerTarget[i].sort((a, b) => {
         if (a.isGuaranteed !== b.isGuaranteed) return a.isGuaranteed ? -1 : 1;
         return b.maxDamage - a.maxDamage;
       });
+      // Re-group by move ID so all variants of the same move stay adjacent.
+      // The group's position in the list is set by its best-sorting variant.
+      const grouped = new Map<number, OHKOMoveInfo[]>();
+      const order: number[] = [];
+      for (const m of movesPerTarget[i]) {
+        if (!grouped.has(m.move.id)) { grouped.set(m.move.id, []); order.push(m.move.id); }
+        grouped.get(m.move.id)!.push(m);
+      }
+      movesPerTarget[i] = order.flatMap(id => grouped.get(id)!);
     }
 
     const allGuaranteed = movesPerTarget.every(moves => moves.some(m => m.isGuaranteed));
