@@ -5,6 +5,23 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.12.2',
+    date: 'May 2026',
+    title: 'Weather Bug Fixes',
+    sections: [
+      {
+        heading: '🐛 Bug Fixes',
+        items: [
+          'Sun now correctly weakens Water-type moves ×0.5 (previously only the Fire boost was applied).',
+          'Rain now correctly weakens Fire-type moves ×0.5 (previously only the Water boost was applied).',
+          'Sand now correctly boosts Rock-type Pokémon\'s Sp. Def by ×1.5 against special moves.',
+          'Snow now correctly boosts Ice-type Pokémon\'s Defense by ×1.5 against physical moves.',
+          'Weather condition tooltips updated to describe all effects.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.12.1',
     date: 'May 2026',
     title: 'Bug Fixes',
