@@ -35,6 +35,12 @@ export const FOUL_PLAY_MOVE_ID = 492;
  */
 export const BODY_PRESS_MOVE_ID = 776;
 export const ROUND_MOVE_ID = 496;
+/**
+ * Electro Shot charges on turn one (raising SpA by +1) and fires on turn two.
+ * In Rain both happen simultaneously — it's a one-turn move, but the +1 SpA
+ * boost still applies. Exported so the loader can set move.twoTurn correctly.
+ */
+export const ELECTRO_SHOT_MOVE_ID = 905;
 
 /**
  * Psyshock, Psystrike, and Secret Sword are Special moves that deal damage
@@ -349,6 +355,12 @@ export interface OHKOMoveInfo {
    * Implies hitsRequired = 2.
    */
   breaksSash?: boolean;
+  /**
+   * True when this move requires a charge turn and cannot OHKO in a single action.
+   * Weather-conditional two-turn moves (Solar Beam in Sun, Electro Shot in Rain) do NOT
+   * have this flag set when the relevant weather is active.
+   */
+  twoTurn?: boolean;
   coveredTargetIndices: number[];
 }
 
@@ -508,6 +520,8 @@ interface OHKOAttempt {
   breaksSturdy?: boolean;
   /** True when the KO bypasses Focus Sash via multi-hit first-hit + subsequent-hit mechanic. */
   breaksSash?: boolean;
+  /** True when this move requires a charge turn (two-turn move). */
+  twoTurn?: boolean;
 }
 
 /**
@@ -600,12 +614,14 @@ function tryOHKO(
   /** Whether the attacker has Parental Bond (Mega Kangaskhan), which also bypasses Sturdy. */
   hasParentalBond = false,
 ): OHKOAttempt | null {
-  // ── Two-turn move filter ───────────────────────────────────────────────────
-  // Moves that require a charge turn cannot OHKO in a single action.
-  // Solar Beam/Blade are one-turn in Sun; Electro Shot is one-turn in Rain.
-  if (move.twoTurn === 'always') return null;
-  if (move.twoTurn === 'no-sun'  && weather !== 'sun')  return null;
-  if (move.twoTurn === 'no-rain' && weather !== 'rain') return null;
+  // ── Two-turn move flag ────────────────────────────────────────────────────
+  // Moves that require a charge turn are tagged so the UI can display a chip
+  // and offer a filter to hide them. Solar Beam/Blade are one-turn in Sun;
+  // Electro Shot is one-turn in Rain — those are not flagged when the weather matches.
+  const isTwoTurn =
+    move.twoTurn === 'always' ||
+    (move.twoTurn === 'no-sun'  && weather !== 'sun')  ||
+    (move.twoTurn === 'no-rain' && weather !== 'rain');
 
   const effectiveTypeId = abilityMod?.typeOverride ?? move.typeId;
 
@@ -692,9 +708,13 @@ function tryOHKO(
   // Attacker stat stage — physical uses atkStage, special uses spaStage.
   // Foul Play uses the target's Attack, so attacker stages don't apply.
   // Body Press uses the attacker's Defense, so it uses atkDefStage instead.
+  // Electro Shot charges SpA by +1 on the charge turn — this bonus applies whether or not
+  // Rain is active (in Rain both turns happen simultaneously but the boost still fires).
+  // The stage is capped at +6 per normal rules.
+  const effectiveSpaStage = move.id === ELECTRO_SHOT_MOVE_ID ? Math.min(6, spaStage + 1) : spaStage;
   const atkStageMult = move.id === FOUL_PLAY_MOVE_ID ? 1.0
     : move.id === BODY_PRESS_MOVE_ID ? stageMult(atkDefStage)
-    : stageMult(isPhysical ? atkStage : spaStage);
+    : stageMult(isPhysical ? atkStage : effectiveSpaStage);
 
   // Choice item multiplier: Band boosts physical (not Foul Play / Body Press), Specs boosts special.
   // Body Press scales off Defense (not Attack), so Choice Band doesn't apply.
@@ -766,7 +786,7 @@ function tryOHKO(
     return {
       evNeeded: 0, item: undefined, stab, effFactor,
       minDmg: s1 * 2, maxDmg: s2 * 2,
-      adjAccuracy, needsGoingSecond, hitsRequired: 2, breaksSturdy: true,
+      adjAccuracy, needsGoingSecond, hitsRequired: 2, breaksSturdy: true, twoTurn: isTwoTurn || undefined,
     };
   }
 
@@ -780,7 +800,7 @@ function tryOHKO(
     return {
       evNeeded: 0, item: undefined, stab, effFactor,
       minDmg: s1 * 2, maxDmg: s2 * 2,
-      adjAccuracy, needsGoingSecond, hitsRequired: 2, breaksSash: true,
+      adjAccuracy, needsGoingSecond, hitsRequired: 2, breaksSash: true, twoTurn: isTwoTurn || undefined,
     };
   }
 
@@ -865,7 +885,7 @@ function tryOHKO(
     totalMax = singleMax * hitsRequired;
   }
 
-  return { evNeeded, baseEvNeeded, item, stab, effFactor, minDmg: totalMin, maxDmg: totalMax, adjAccuracy, needsRoundBoost, needsGoingSecond, defAbility, hitsRequired };
+  return { evNeeded, baseEvNeeded, item, stab, effFactor, minDmg: totalMin, maxDmg: totalMax, adjAccuracy, needsRoundBoost, needsGoingSecond, defAbility, hitsRequired, twoTurn: isTwoTurn || undefined };
 }
 
 export function findPokemonOHKOs(
@@ -1052,6 +1072,7 @@ export function findPokemonOHKOs(
             hitsRequired: chosen.hitsRequired,
             breaksSturdy: chosen.breaksSturdy,
             breaksSash: chosen.breaksSash,
+            twoTurn: chosen.twoTurn,
             coveredTargetIndices: [],
           });
         }
@@ -1110,6 +1131,7 @@ export function findPokemonOHKOs(
               hitsRequired: natureChosen.hitsRequired,
               breaksSturdy: natureChosen.breaksSturdy,
               breaksSash: natureChosen.breaksSash,
+              twoTurn: natureChosen.twoTurn,
               nature: natureLabel,
               coveredTargetIndices: [],
             });

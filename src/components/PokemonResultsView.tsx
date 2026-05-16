@@ -207,6 +207,7 @@ interface Filters {
   defaultOnly: boolean;
   excludedForms: Set<FormCategory>;
   excludedFlags: Set<MoveFlag>;
+  hideTwoTurnMoves: boolean;
 }
 
 const EMPTY_FILTERS: Filters = {
@@ -220,6 +221,7 @@ const EMPTY_FILTERS: Filters = {
   defaultOnly: false,
   excludedForms: new Set(),
   excludedFlags: new Set(),
+  hideTwoTurnMoves: false,
 };
 
 export function countActiveFilters(f: Filters, minAccuracy: number, showPossible: boolean): number {
@@ -234,6 +236,7 @@ export function countActiveFilters(f: Filters, minAccuracy: number, showPossible
     (f.defaultOnly ? 1 : 0) +
     (f.excludedForms.size > 0 ? 1 : 0) +
     (f.excludedFlags.size > 0 ? 1 : 0) +
+    (f.hideTwoTurnMoves ? 1 : 0) +
     (showPossible ? 1 : 0) +
     (minAccuracy > 0 ? 1 : 0)
   );
@@ -699,6 +702,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
                   ['noEvs', statMode === 'sp' ? 'No SP investment required' : 'No EV investment required'],
                   ['noItem', 'No held item required'],
                   ['defaultOnly', 'Default forms only'],
+                  ['hideTwoTurnMoves', 'Hide 2-turn moves'],
                 ] as [keyof Filters, string][]).map(([key, label]) => (
                   <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }}>
                     <input
@@ -764,11 +768,12 @@ export default function PokemonResultsView({ title, results, targetNames, target
           const moveCounts = movesPerTarget.map((moves, ti) => {
             // Apply the same filters as MoveTable so the count matches what's displayed
             const visible = moves.filter(m =>
-              (!filters.noItem       || !m.item) &&
-              (!filters.noEvs        || m.evNeeded === 0) &&
-              (!isMega               || !m.item) &&
-              (choiceItem === null    || !m.item) &&
-              (!targetsMustOutspeed[ti] || m.move.priority >= 0)
+              (!filters.noItem            || !m.item) &&
+              (!filters.noEvs             || m.evNeeded === 0) &&
+              (!isMega                    || !m.item) &&
+              (choiceItem === null         || !m.item) &&
+              (!targetsMustOutspeed[ti]   || m.move.priority >= 0) &&
+              (!filters.hideTwoTurnMoves  || !m.twoTurn)
             );
             return {
               guaranteed: visible.filter(m => m.isGuaranteed).length,
@@ -1190,11 +1195,12 @@ export default function PokemonResultsView({ title, results, targetNames, target
                       </div>
                       <MoveTable
                         moves={moves.filter(m =>
-                          (!filters.noItem    || !m.item) &&
-                          (!filters.noEvs     || m.evNeeded === 0) &&
-                          (!isMega            || !m.item) &&
-                          (choiceItem === null || !m.item) &&
-                          (!targetsMustOutspeed[ti] || m.move.priority >= 0)
+                          (!filters.noItem           || !m.item) &&
+                          (!filters.noEvs            || m.evNeeded === 0) &&
+                          (!isMega                   || !m.item) &&
+                          (choiceItem === null        || !m.item) &&
+                          (!targetsMustOutspeed[ti]  || m.move.priority >= 0) &&
+                          (!filters.hideTwoTurnMoves || !m.twoTurn)
                         )}
                         data={data}
                         totalTargets={movesPerTarget.length}
@@ -1479,6 +1485,24 @@ function MoveTable({ moves, data, totalTargets, targetNames, isDoubles, statMode
                         whiteSpace: 'nowrap',
                       }}>
                         ✕{m.hitsRequired} hits
+                      </span>
+                    </Tooltip>
+                  )}
+                  {/* Two-turn chip */}
+                  {m.twoTurn && (
+                    <Tooltip
+                      content={`${m.move.name} requires a charge turn — it cannot OHKO in a single action. Use the Filters panel to hide 2-turn moves.`}
+                      side="bottom"
+                      maxWidth={260}
+                    >
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, cursor: 'help',
+                        background: '#faf5ff', color: '#553c9a',
+                        border: '1px solid #b794f4',
+                        borderRadius: '3px', padding: '1px 5px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        ⏳ 2 Turns
                       </span>
                     </Tooltip>
                   )}

@@ -5,6 +5,21 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.18.0',
+    date: 'May 2026',
+    title: 'Two-Turn Move Chip, Filter & Electro Shot SpA Boost',
+    sections: [
+      {
+        heading: '✨ New',
+        items: [
+          'Two-turn moves (Dig, Fly, Dive, Bounce, Shadow Force, etc.) are now shown in results with a ⏳ 2 Turns chip rather than being hidden. Solar Beam/Blade and Electro Shot show the chip only when the relevant weather (Sun / Rain) is not active.',
+          'A "Hide 2-turn moves" checkbox has been added to the Filters panel for users who only want to see moves that can OHKO in a single action.',
+          'Electro Shot now correctly applies the +1 SpA stage it grants on its charge turn. This boost applies whether or not Rain is active (in Rain the charge and fire happen simultaneously, but the SpA gain still occurs). The stage is capped at +6 per normal rules.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.17.0',
     date: 'May 2026',
     title: 'Two-Turn Moves, Weight & Speed-Based Moves',

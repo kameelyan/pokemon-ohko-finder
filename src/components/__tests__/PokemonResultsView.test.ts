@@ -81,6 +81,7 @@ const emptyFilters = {
   defaultOnly: false,
   excludedForms: new Set<'mega' | 'regional' | 'gmax' | 'other'>(),
   excludedFlags: new Set<MoveFlag>(),
+  hideTwoTurnMoves: false,
 };
 
 describe('countActiveFilters', () => {
@@ -223,11 +224,12 @@ describe('countActiveFilters — exhaustive combinations', () => {
       noEvs: false, noItem: false, defaultOnly: false,
       excludedForms: new Set<'mega' | 'regional' | 'gmax' | 'other'>(),
       excludedFlags: new Set<MoveFlag>(),
+      hideTwoTurnMoves: false,
     };
     expect(countActiveFilters(f, 0, false)).toBe(0);
   });
 
-  it('counts all 12 possible active filters when everything is set', () => {
+  it('counts all 13 possible active filters when everything is set', () => {
     const f = {
       types: new Set([10, 11]),     // +2
       minSpe: '80',                  // +1
@@ -239,14 +241,15 @@ describe('countActiveFilters — exhaustive combinations', () => {
       defaultOnly: true,             // +1
       excludedForms: new Set(['mega' as const]), // +1
       excludedFlags: new Set(['contact' as MoveFlag]), // +1
+      hideTwoTurnMoves: true,        // +1
     };
     // types(2) + minSpe(1) + maxSpe(1) + outspeed(1) + category(1) + noEvs(1) + noItem(1)
-    // + defaultOnly(1) + excludedForms(1) + excludedFlags(1) + showPossible(1) + minAccuracy(1) = 13
-    expect(countActiveFilters(f, 80, true)).toBe(13);
+    // + defaultOnly(1) + excludedForms(1) + excludedFlags(1) + hideTwoTurnMoves(1) + showPossible(1) + minAccuracy(1) = 14
+    expect(countActiveFilters(f, 80, true)).toBe(14);
   });
 
   it('minSpe empty string does not count, non-empty string does', () => {
-    const base = { types: new Set<number>(), minSpe: '', maxSpe: '', outspeed: 'any' as const, category: 'all' as const, noEvs: false, noItem: false, defaultOnly: false, excludedForms: new Set<'mega' | 'regional' | 'gmax' | 'other'>(), excludedFlags: new Set<MoveFlag>() };
+    const base = { types: new Set<number>(), minSpe: '', maxSpe: '', outspeed: 'any' as const, category: 'all' as const, noEvs: false, noItem: false, defaultOnly: false, excludedForms: new Set<'mega' | 'regional' | 'gmax' | 'other'>(), excludedFlags: new Set<MoveFlag>(), hideTwoTurnMoves: false };
     expect(countActiveFilters({ ...base, minSpe: '' }, 0, false)).toBe(0);
     expect(countActiveFilters({ ...base, minSpe: '0' }, 0, false)).toBe(1);
     expect(countActiveFilters({ ...base, minSpe: '0', maxSpe: '999' }, 0, false)).toBe(2);
