@@ -308,7 +308,7 @@ export default function PokemonResultsView({ title, results, targetNames, target
       const isMega = r.pokemon.identifier.includes('-mega') || r.pokemon.identifier.includes('-primal');
       // Mega and Primal Pokémon hold their Mega Stone / Orb and can't use a Choice item
       if (choiceItem !== null && isMega) return false;
-      if ((filters.noItem || isMega) && !r.movesPerTarget.every(moves => moves.some(m => !m.item))) return false;
+      if ((filters.noItem || isMega || choiceItem !== null) && !r.movesPerTarget.every(moves => moves.some(m => !m.item))) return false;
       if (filters.defaultOnly && !r.pokemon.isDefault) return false;
       if (filters.excludedForms.size > 0 && !r.pokemon.isDefault) {
         const fc = getFormCategory(r.pokemon.identifier, r.pokemon.isDefault);
@@ -752,9 +752,10 @@ export default function PokemonResultsView({ title, results, targetNames, target
           const moveCounts = movesPerTarget.map((moves, ti) => {
             // Apply the same filters as MoveTable so the count matches what's displayed
             const visible = moves.filter(m =>
-              (!filters.noItem || !m.item) &&
-              (!filters.noEvs  || m.evNeeded === 0) &&
-              (!isMega         || !m.item) &&
+              (!filters.noItem       || !m.item) &&
+              (!filters.noEvs        || m.evNeeded === 0) &&
+              (!isMega               || !m.item) &&
+              (choiceItem === null    || !m.item) &&
               (!targetsMustOutspeed[ti] || m.move.priority >= 0)
             );
             return {
@@ -1168,9 +1169,10 @@ export default function PokemonResultsView({ title, results, targetNames, target
                       </div>
                       <MoveTable
                         moves={moves.filter(m =>
-                          (!filters.noItem || !m.item) &&
-                          (!filters.noEvs  || m.evNeeded === 0) &&
-                          (!isMega         || !m.item) &&
+                          (!filters.noItem    || !m.item) &&
+                          (!filters.noEvs     || m.evNeeded === 0) &&
+                          (!isMega            || !m.item) &&
+                          (choiceItem === null || !m.item) &&
                           (!targetsMustOutspeed[ti] || m.move.priority >= 0)
                         )}
                         data={data}
