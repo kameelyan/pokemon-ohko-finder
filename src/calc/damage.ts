@@ -613,6 +613,8 @@ function tryOHKO(
   hasMoldBreaker = false,
   /** Whether the attacker has Parental Bond (Mega Kangaskhan), which also bypasses Sturdy. */
   hasParentalBond = false,
+  /** Whether the attacker can hold a type-boost item. False for Mega/Primal Pokémon (they hold their transformation item). */
+  allowTypeItem = true,
 ): OHKOAttempt | null {
   // ── Two-turn move flag ────────────────────────────────────────────────────
   // Moves that require a charge turn are tagged so the UI can display a chip
@@ -831,7 +833,8 @@ function tryOHKO(
     evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult, evStep, maxAttackerEV);
 
     // Only fall back to a type-boosting item if no choice item is active — can't hold two items.
-    if (evNeeded === null && choiceItemMult === 1.0) {
+    // Mega/Primal Pokémon hold their transformation item and cannot hold type-boost items.
+    if (evNeeded === null && choiceItemMult === 1.0 && allowTypeItem) {
       const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
       if (typeItem) {
         evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult, evStep, maxAttackerEV);
@@ -844,7 +847,7 @@ function tryOHKO(
       item = undefined;
       activePower = effectivePower * 2;
       evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult, evStep, maxAttackerEV);
-      if (evNeeded === null && choiceItemMult === 1.0) {
+      if (evNeeded === null && choiceItemMult === 1.0 && allowTypeItem) {
         const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
         if (typeItem) {
           evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult, evStep, maxAttackerEV);
@@ -943,6 +946,9 @@ export function findPokemonOHKOs(
     const hasMoldBreaker = attacker.abilities.some(a => STURDY_BYPASS_ABILITIES.has(a.identifier));
     const hasParentalBond = attacker.id === PARENTAL_BOND_POKEMON_ID;
     const attackerSpe = calcStat(attacker.stats.spe, 0, 31, 50, 1.0);
+    // Mega and Primal Pokémon hold their transformation item (Mega Stone / Blue/Red Orb)
+    // and therefore cannot hold type-boost items like Soft Sand, Charcoal, etc.
+    const isMegaAttacker = attacker.identifier.includes('-mega') || attacker.identifier.includes('-primal');
 
     const movesPerTarget: OHKOMoveInfo[][] = targets.map(() => []);
 
@@ -994,7 +1000,7 @@ export function findPokemonOHKOs(
       const tryConfigs = (configs: AbilityConfig[], w: Weather, ts: TargetStats, atkNM = 1.0, spaNM = 1.0) => {
         let best: { attempt: OHKOAttempt; ability: typeof attacker.abilities[0] | null } | null = null;
         for (const { mod, ability } of configs) {
-          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, atkNM, spaNM, evStep, maxAttackerEV, attacker.weight, attackerSpe, hasMoldBreaker, hasParentalBond);
+          const attempt = tryOHKO(move, atkBase, attacker.typeIds, ts, data, showPossible, minAccuracy, mod, w, isDoubles, gravity, terrain, fairyAura, atkStage, spaStage, atkDefStage, atkItemMult, spaItemMult, atkNM, spaNM, evStep, maxAttackerEV, attacker.weight, attackerSpe, hasMoldBreaker, hasParentalBond, !isMegaAttacker);
           if (attempt && (!best || attempt.evNeeded < best.attempt.evNeeded)) {
             best = { attempt, ability };
           }

@@ -5,6 +5,25 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.20.0',
+    date: 'May 2026',
+    title: 'Mega Pokémon Item Restriction Fix',
+    sections: [
+      {
+        heading: '🐛 Fixed',
+        items: [
+          'Mega and Primal Pokémon now correctly never receive type-boost item rows (Soft Sand, Charcoal, etc.) in results. Megas hold their Mega Stone / Orb and cannot hold any other item, so these rows were misleading. The fix was applied at the calculation layer (not just the display layer), ensuring accurate results everywhere.',
+        ],
+      },
+      {
+        heading: '🧪 Testing',
+        items: [
+          'Added unit tests confirming Mega Tyranitar produces no Soft Sand result for Earthquake, while a regular Tyranitar with identical stats does. Also verified that the +Atk nature row (no item needed) still appears correctly for the mega.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.19.0',
     date: 'May 2026',
     title: 'Nature Variant Bug Fix',

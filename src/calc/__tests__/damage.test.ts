@@ -440,10 +440,11 @@ function makePokemon(
   hp: number,
   typeIds: number[],
   abilities: PokemonAbility[] = [],
+  identifier?: string,
 ): Pokemon {
   return {
     id,
-    identifier: `pokemon-${id}`,
+    identifier: identifier ?? `pokemon-${id}`,
     name: `Pokemon ${id}`,
     speciesId: id,
     isDefault: true,
@@ -967,8 +968,9 @@ describe('findPokemonOHKOs — Parental Bond bypasses Focus Sash', () => {
 describe('findPokemonOHKOs — nature variant for spread move (Earthquake scenario)', () => {
   const GROUND = 5, FIGHTING = 2, POISON = 4, ROCK = 6, DARK = 17;
 
-  // Mega Tyranitar stats: atk=164, Rock/Dark type
-  const megaTyranitar = makePokemon(10049, 164, 150, 100, [ROCK, DARK]);
+  // Mega Tyranitar stats: atk=164, Rock/Dark type.
+  // Use the real '-mega' identifier so isMegaAttacker=true and Soft Sand is blocked.
+  const megaTyranitar = makePokemon(10049, 164, 150, 100, [ROCK, DARK], [], 'tyranitar-mega');
 
   // Sneasler: hp=80, def=60, types=Fighting/Poison
   const sneasler = makePokemon(903, 130, 60, 80, [FIGHTING, POISON]);
@@ -1010,16 +1012,19 @@ describe('findPokemonOHKOs — nature variant for spread move (Earthquake scenar
     evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
   };
 
-  it('neutral Earthquake with Soft Sand CAN guarantee OHKO (item-assisted at ev=0)', () => {
-    // Ground type moves have Soft Sand (1.2×) as their type-boost item.
-    // Soft Sand at ev=0: atk=184 → base=77, afterType=154, max=floor(154×1.2)=184, min=floor(184×0.85)=156 ≥ 155.
-    // So a Soft Sand neutral row IS expected — the neutral-no-item row is absent.
+  it('Mega Tyranitar: no Soft Sand result — megas hold their Mega Stone, not type-boost items', () => {
+    // Ground type moves have Soft Sand (1.2×) as their type-boost item for non-megas.
+    // For Mega Tyranitar (identifier contains '-mega'), allowTypeItem=false, so Soft Sand
+    // is never computed. The neutral no-item row is also absent (can't OHKO within 252 EVs
+    // without the item boost), so NO neutral row should appear at all.
     const results = findPokemonOHKOs([target], data, false, 0, 'none', true /* doubles */);
     const allMoves = results.flatMap(r => r.movesPerTarget.flat());
+    // No neutral row (neither with item nor without — can't reach the OHKO threshold).
     const neutralEQ = allMoves.find(m => m.move.id === 89 && !m.nature);
-    expect(neutralEQ).toBeDefined();
-    expect(neutralEQ!.item?.identifier).toBe('soft-sand'); // neutral works only with item
-    expect(neutralEQ!.isGuaranteed).toBe(true);
+    expect(neutralEQ).toBeUndefined();
+    // Confirm no result for any attacker uses a type-boost item.
+    const anyItem = allMoves.some(m => m.item !== undefined);
+    expect(anyItem).toBe(false);
   });
 
   it('+Atk nature variant row appears for Earthquake (guaranteed OHKO at 124 EVs, no item needed)', () => {
@@ -1039,5 +1044,25 @@ describe('findPokemonOHKOs — nature variant for spread move (Earthquake scenar
     const allMoves = results.flatMap(r => r.movesPerTarget.flat());
     const natureEQ = allMoves.find(m => m.move.id === 89 && m.nature === '+atk');
     expect(natureEQ!.evNeeded).toBeLessThanOrEqual(124);
+  });
+
+  it('non-mega attacker with same stats DOES receive a Soft Sand neutral row', () => {
+    // Verify that the allowTypeItem guard only blocks megas — a regular (non-mega) attacker
+    // with the same stats should still have Soft Sand computed and shown.
+    const regularAttacker = makePokemon(248, 164, 150, 100, [ROCK, DARK]); // Tyranitar (no mega)
+    const regularData: GameData = {
+      pokemon:      new Map([[regularAttacker.id, regularAttacker]]),
+      moves:        new Map([[earthquake.id, earthquake]]),
+      pokemonMoves: new Map([[regularAttacker.id, new Set([earthquake.id])]]),
+      typeEfficacy,
+      typeNames:    new Map([[FIGHTING, 'Fighting'], [POISON, 'Poison']]),
+      championsRoster: new Set(),
+    };
+    const results = findPokemonOHKOs([target], regularData, false, 0, 'none', true /* doubles */);
+    const allMoves = results.flatMap(r => r.movesPerTarget.flat());
+    const neutralEQ = allMoves.find(m => m.move.id === 89 && !m.nature);
+    expect(neutralEQ).toBeDefined();
+    expect(neutralEQ!.item?.identifier).toBe('soft-sand');
+    expect(neutralEQ!.isGuaranteed).toBe(true);
   });
 });
