@@ -1108,8 +1108,13 @@ export function findPokemonOHKOs(
               : undefined;
           }
 
-          // Only show a nature-variant row when it achieves a strictly lower EV threshold
-          if (natureChosen && (!chosen || natureChosen.evNeeded < chosen.evNeeded)) {
+          // Show the nature-variant row when it achieves a strictly lower EV threshold —
+          // OR when the neutral result only works via a type-boost item (Soft Sand, etc.),
+          // because the nature variant represents a no-item alternative the player may prefer.
+          // Without this check, a neutral+item result at evNeeded=0 would suppress the
+          // nature+no-item result at evNeeded=124, hiding it from the player entirely.
+          const chosenNeedsItem = chosen !== null && chosen.item !== undefined;
+          if (natureChosen && (!chosen || chosenNeedsItem || natureChosen.evNeeded < chosen.evNeeded)) {
             movesPerTarget[ti].push({
               move,
               minDamage: natureChosen.minDmg,

@@ -5,6 +5,25 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.19.0',
+    date: 'May 2026',
+    title: 'Nature Variant Bug Fix',
+    sections: [
+      {
+        heading: '🐛 Fixed',
+        items: [
+          'Nature variant rows (+Atk / +SpA) were being suppressed when a neutral-nature OHKO was achievable via a type-boost item (e.g. Soft Sand for Ground moves) at 0 EVs. For example, Mega Tyranitar\'s Earthquake now correctly shows a "+Atk nature" row against targets like Sneasler, even though a neutral Soft Sand result also exists. The two rows represent different trade-offs (item vs nature) and are now shown independently.',
+        ],
+      },
+      {
+        heading: '🧪 Testing',
+        items: [
+          'Added unit tests verifying the Mega Tyranitar vs Sneasler Earthquake scenario: neutral+Soft Sand row appears alongside the +Atk nature row, and both are independently guaranteed OHKOs.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.18.0',
     date: 'May 2026',
     title: 'Two-Turn Move Chip, Filter & Electro Shot SpA Boost',

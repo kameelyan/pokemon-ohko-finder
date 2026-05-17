@@ -941,3 +941,103 @@ describe('findPokemonOHKOs — Parental Bond bypasses Focus Sash', () => {
     expect(results.length).toBe(0);
   });
 });
+
+// ─── Nature variant — spread move in doubles ──────────────────────────────────
+//
+// Mirrors the real Mega Tyranitar vs Sneasler scenario:
+//   Attacker: base Atk 164, Rock/Dark type (no Ground STAB)
+//   Target: hp base 80 (→155 HP), def base 60 (→80 Def), types=Fighting/Poison
+//   Move: Earthquake (power 100, Ground type, isSpread=true in doubles → effective power 75)
+//   Type effectiveness: Ground vs Poison = ×2 → effFactor = 200
+//
+//   Neutral nature:
+//     At 252 EVs: atk = floor(216 × 1.0) = 216
+//       base = floor(floor(22×75×216/80)/50)+2 = 91
+//       afterType = floor(91×2) = 182, min = floor(182×0.85) = 154  → 154 < 155 → FAILS
+//     → Cannot guarantee OHKO at any EV ≤ 252.
+//
+//   +Atk nature (×1.1):
+//     At 124 EVs: calcStat(164,124)=200, atk = floor(200×1.1) = 220
+//       base = floor(floor(22×75×220/80)/50)+2 = 92
+//       afterType = floor(92×2) = 184, min = floor(184×0.85) = 156  → 156 ≥ 155 → PASSES
+//     → Guaranteed OHKO at 124 EVs.
+//
+// Expected: findPokemonOHKOs should emit a nature-variant row (nature='+atk').
+
+describe('findPokemonOHKOs — nature variant for spread move (Earthquake scenario)', () => {
+  const GROUND = 5, FIGHTING = 2, POISON = 4, ROCK = 6, DARK = 17;
+
+  // Mega Tyranitar stats: atk=164, Rock/Dark type
+  const megaTyranitar = makePokemon(10049, 164, 150, 100, [ROCK, DARK]);
+
+  // Sneasler: hp=80, def=60, types=Fighting/Poison
+  const sneasler = makePokemon(903, 130, 60, 80, [FIGHTING, POISON]);
+
+  // Earthquake: power 100, Ground, physical, spread in doubles
+  const earthquake: Move = {
+    id: 89,
+    identifier: 'earthquake',
+    name: 'Earthquake',
+    typeId: GROUND,
+    power: 100,
+    damageClassId: 2,
+    accuracy: 100,
+    description: '',
+    priority: 0,
+    flags: [],
+    effectId: 148,
+    effectChance: null,
+    isSpread: true,
+    multiHit: null,
+  };
+
+  const typeEfficacy = new Map<string, number>([
+    [`${GROUND}-${FIGHTING}`, 100], // Ground neutral vs Fighting
+    [`${GROUND}-${POISON}`,   200], // Ground 2× vs Poison
+  ]);
+
+  const data: GameData = {
+    pokemon:      new Map([[megaTyranitar.id, megaTyranitar]]),
+    moves:        new Map([[earthquake.id, earthquake]]),
+    pokemonMoves: new Map([[megaTyranitar.id, new Set([earthquake.id])]]),
+    typeEfficacy,
+    typeNames:    new Map([[FIGHTING, 'Fighting'], [POISON, 'Poison']]),
+    championsRoster: new Set(),
+  };
+
+  const target: TargetConfig = {
+    pokemon: sneasler,
+    evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+  };
+
+  it('neutral Earthquake with Soft Sand CAN guarantee OHKO (item-assisted at ev=0)', () => {
+    // Ground type moves have Soft Sand (1.2×) as their type-boost item.
+    // Soft Sand at ev=0: atk=184 → base=77, afterType=154, max=floor(154×1.2)=184, min=floor(184×0.85)=156 ≥ 155.
+    // So a Soft Sand neutral row IS expected — the neutral-no-item row is absent.
+    const results = findPokemonOHKOs([target], data, false, 0, 'none', true /* doubles */);
+    const allMoves = results.flatMap(r => r.movesPerTarget.flat());
+    const neutralEQ = allMoves.find(m => m.move.id === 89 && !m.nature);
+    expect(neutralEQ).toBeDefined();
+    expect(neutralEQ!.item?.identifier).toBe('soft-sand'); // neutral works only with item
+    expect(neutralEQ!.isGuaranteed).toBe(true);
+  });
+
+  it('+Atk nature variant row appears for Earthquake (guaranteed OHKO at 124 EVs, no item needed)', () => {
+    // Even though neutral+Soft Sand gives evNeeded=0, the nature variant (no item, ev=124)
+    // should still appear — it's the answer to "do I need an item, or just the right nature?"
+    const results = findPokemonOHKOs([target], data, false, 0, 'none', true /* doubles */);
+    const allMoves = results.flatMap(r => r.movesPerTarget.flat());
+    const natureEQ = allMoves.find(m => m.move.id === 89 && m.nature === '+atk');
+    expect(natureEQ).toBeDefined();
+    expect(natureEQ!.item).toBeUndefined();   // no item needed — just the nature
+    expect(natureEQ!.isGuaranteed).toBe(true);
+    expect(natureEQ!.evNeeded).toBeLessThanOrEqual(252);
+  });
+
+  it('+Atk nature Earthquake shows evNeeded ≤ 124', () => {
+    const results = findPokemonOHKOs([target], data, false, 0, 'none', true /* doubles */);
+    const allMoves = results.flatMap(r => r.movesPerTarget.flat());
+    const natureEQ = allMoves.find(m => m.move.id === 89 && m.nature === '+atk');
+    expect(natureEQ!.evNeeded).toBeLessThanOrEqual(124);
+  });
+});
