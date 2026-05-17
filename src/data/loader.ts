@@ -51,6 +51,7 @@ export async function loadGameData(): Promise<GameData> {
     pokemonAbilitiesJson,
     championsRosterJson,
     moveFlagsJson,
+    usageJson,
   ] = await Promise.all([
     fetchCSV(`${base}data/pokemon.csv`),
     fetchCSV(`${base}data/pokemon_species_names.csv`),
@@ -67,6 +68,7 @@ export async function loadGameData(): Promise<GameData> {
     fetchJSON<Record<string, PokemonAbility[]>>(`${base}data/pokemon_abilities.json`),
     fetchJSON<number[]>(`${base}data/champions_roster.json`),
     fetchJSON<Record<string, MoveFlag[]>>(`${base}data/move_flags.json`),
+    fetchJSON<{ rankings: Record<string, number> }>(`${base}data/pokemon_usage.json`),
   ]);
 
   // English species names (language_id = 9)
@@ -296,5 +298,9 @@ export async function loadGameData(): Promise<GameData> {
 
   const championsRoster = new Set<number>(championsRosterJson);
 
-  return { pokemon, moves, pokemonMoves, typeEfficacy, typeNames, championsRoster };
+  const usageRank = new Map<string, number>(
+    Object.entries(usageJson.rankings)
+  );
+
+  return { pokemon, moves, pokemonMoves, typeEfficacy, typeNames, championsRoster, usageRank };
 }

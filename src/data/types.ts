@@ -82,4 +82,6 @@ export interface GameData {
   typeEfficacy: Map<string, number>; // `${atkType}-${defType}` -> factor
   typeNames: Map<number, string>;
   championsRoster: Set<number>; // Pokémon IDs (form-level) available in Pokémon Champions
+  /** Competitive usage rank by PokeAPI identifier (1 = most used). From Limitless VGC. */
+  usageRank: Map<string, number>;
 }

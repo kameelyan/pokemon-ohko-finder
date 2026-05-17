@@ -1195,8 +1195,14 @@ export function findPokemonOHKOs(
   const bst = (p: Pokemon) =>
     p.stats.hp + p.stats.atk + p.stats.def + p.stats.spa + p.stats.spd + p.stats.spe;
 
+  // Sort: guaranteed OHKOs first, then by competitive usage rank (lower rank = more used),
+  // falling back to BST for Pokémon not present in the usage data.
+  const NO_RANK = 99999;
   results.sort((a, b) => {
     if (a.allGuaranteed !== b.allGuaranteed) return a.allGuaranteed ? -1 : 1;
+    const ra = data.usageRank.get(a.pokemon.identifier) ?? NO_RANK;
+    const rb = data.usageRank.get(b.pokemon.identifier) ?? NO_RANK;
+    if (ra !== rb) return ra - rb;
     return bst(b.pokemon) - bst(a.pokemon);
   });
 

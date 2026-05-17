@@ -5,6 +5,20 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.21.0',
+    date: 'May 2026',
+    title: 'Usage-Based Default Sort',
+    sections: [
+      {
+        heading: '✨ New',
+        items: [
+          'Results now sort by competitive usage rank by default, placing the most commonly used Pokémon at the top. Usage data is sourced from Limitless VGC (all formats, all time) and covers the top 275 Pokémon by tournament points. Pokémon outside the dataset sort by BST as a fallback.',
+          'A new "Usage Rank" option has been added to the Sort dropdown. A "via Limitless VGC ↗" attribution link appears next to the sort control when this mode is active.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.20.0',
     date: 'May 2026',
     title: 'Mega Pokémon Item Restriction Fix',

@@ -497,7 +497,8 @@ function makeData(
   }
   const typeNames = new Map<number, string>([[targetTypeId, 'Normal']]);
   const championsRoster = new Set<number>();
-  return { pokemon: pokemonMap, moves: movesMap, pokemonMoves, typeEfficacy, typeNames, championsRoster };
+  const usageRank = new Map<string, number>();
+  return { pokemon: pokemonMap, moves: movesMap, pokemonMoves, typeEfficacy, typeNames, championsRoster, usageRank };
 }
 
 /** Build a minimal TargetConfig from a Pokemon with optional ability selection. */
@@ -1005,6 +1006,7 @@ describe('findPokemonOHKOs — nature variant for spread move (Earthquake scenar
     typeEfficacy,
     typeNames:    new Map([[FIGHTING, 'Fighting'], [POISON, 'Poison']]),
     championsRoster: new Set(),
+    usageRank:    new Map(),
   };
 
   const target: TargetConfig = {
@@ -1057,6 +1059,7 @@ describe('findPokemonOHKOs — nature variant for spread move (Earthquake scenar
       typeEfficacy,
       typeNames:    new Map([[FIGHTING, 'Fighting'], [POISON, 'Poison']]),
       championsRoster: new Set(),
+      usageRank:    new Map(),
     };
     const results = findPokemonOHKOs([target], regularData, false, 0, 'none', true /* doubles */);
     const allMoves = results.flatMap(r => r.movesPerTarget.flat());

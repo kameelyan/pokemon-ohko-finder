@@ -159,10 +159,11 @@ export function statColor(val: number): string {
 
 // ── Sort + Filter types ──────────────────────────────────────────────────────
 
-type SortKey = 'bst' | 'name' | 'atk' | 'spa' | 'spe' | 'def' | 'spd' | 'hp';
+type SortKey = 'usage' | 'bst' | 'name' | 'atk' | 'spa' | 'spe' | 'def' | 'spd' | 'hp';
 type SortDir = 'asc' | 'desc';
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'usage', label: 'Usage Rank' },
   { key: 'bst',  label: 'Base Stat Total' },
   { key: 'name', label: 'Name' },
   { key: 'spe',  label: 'Speed' },
@@ -262,8 +263,8 @@ export default function PokemonResultsView({ title, results, targetNames, target
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
-  const [sortKey, setSortKey] = useState<SortKey>('bst');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortKey, setSortKey] = useState<SortKey>('usage');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [search, setSearch] = useState('');
 
   const toggle = (id: number) =>
@@ -351,12 +352,20 @@ export default function PokemonResultsView({ title, results, targetNames, target
 
   const sortedResults = useMemo(() => {
     const arr = [...filteredResults];
+    const NO_RANK = 99999;
     arr.sort((a, b) => {
       const bst = (p: typeof a.pokemon) =>
         p.stats.hp + p.stats.atk + p.stats.def + p.stats.spa + p.stats.spd + p.stats.spe;
       let av: number | string;
       let bv: number | string;
       switch (sortKey) {
+        case 'usage': {
+          // Unranked Pokémon sort after all ranked ones, then by BST descending as tiebreaker.
+          const ra = data.usageRank.get(a.pokemon.identifier) ?? NO_RANK;
+          const rb = data.usageRank.get(b.pokemon.identifier) ?? NO_RANK;
+          if (ra !== rb) return sortDir === 'asc' ? ra - rb : rb - ra;
+          return bst(b.pokemon) - bst(a.pokemon);
+        }
         case 'bst':  av = bst(a.pokemon);        bv = bst(b.pokemon);        break;
         case 'name': av = a.pokemon.name;         bv = b.pokemon.name;        break;
         case 'atk':  av = a.pokemon.stats.atk;   bv = b.pokemon.stats.atk;   break;
@@ -469,6 +478,17 @@ export default function PokemonResultsView({ title, results, targetNames, target
               {sortDir === 'asc' ? '↑' : '↓'}
             </button>
           </div>
+          {sortKey === 'usage' && (
+            <a
+              href="https://limitlessvgc.com/pokemon?time=all&type=all&format=all&region=all"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Usage data sourced from Limitless VGC — all formats, all time"
+              style={{ fontSize: '10px', color: '#aaa', textDecoration: 'none', whiteSpace: 'nowrap' }}
+            >
+              via Limitless VGC ↗
+            </a>
+          )}
         </div>
 
         {/* Battle Effects + Filters + expand/collapse — far right */}
