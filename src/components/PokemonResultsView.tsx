@@ -49,6 +49,7 @@ function CategoryIcon({ damageClassId }: { damageClassId: number }) {
 /** Emoji fallbacks for items whose sprites are missing from the PokeAPI sprites repo */
 const ITEM_EMOJI_FALLBACK: Record<string, string> = {
   'fairy-feather': '🪶',
+  'life-orb': '🔮',
 };
 
 function ItemIcon({ identifier, name, boost, size = 16 }: { identifier: string; name: string; boost: number; size?: number }) {

@@ -391,6 +391,14 @@ const TYPE_BOOST_ITEMS: Record<number, HeldItem> = {
   18: { name: 'Fairy Feather',  identifier: 'fairy-feather',  boost: 1.2 },
 };
 
+/**
+ * Life Orb — universal ×1.3 boost to every damaging move, added to the format in
+ * Pokémon Champions Regulation M-B. Unlike the type-boost plates (1.2×, one type only),
+ * it applies to any move, so it reaches OHKOs the plates can't. Its 1/10-max-HP recoil
+ * isn't modelled because it doesn't affect a single-turn knockout.
+ */
+const LIFE_ORB: HeldItem = { name: 'Life Orb', identifier: 'life-orb', boost: 1.3 };
+
 export function calcHP(base: number, ev = 0, iv = 31, level = 50): number {
   return Math.floor((2 * base + iv + Math.floor(ev / 4)) * level / 100) + level + 10;
 }
@@ -822,6 +830,21 @@ function tryOHKO(
     ? Math.ceil(ts.hp / multiHitCount)
     : ts.hp;
 
+  // Offensive held items the attacker falls back on when raw EV investment can't secure the KO.
+  // Tried in ascending boost order so the weakest sufficient item is reported: the type-specific
+  // plate (1.2×) is preferred when it works, with Life Orb (1.3×, any move) extending coverage to
+  // KOs the plate can't reach. Returns the chosen item plus the EVs it needs, or null if none work.
+  // (Callers gate this on allowTypeItem and choiceItemMult === 1.0 — can't stack two items.)
+  const tryFallbackItem = (power: number): { ev: number; item: HeldItem } | null => {
+    const plate = TYPE_BOOST_ITEMS[effectiveTypeId];
+    const candidates: HeldItem[] = plate ? [plate, LIFE_ORB] : [LIFE_ORB];
+    for (const cand of candidates) {
+      const ev = minEVsToOHKO(power, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, cand.boost, atkTotalMult, evStep, maxAttackerEV);
+      if (ev !== null) return { ev, item: cand };
+    }
+    return null;
+  };
+
   if (isFoulPlay) {
     // Foul Play uses the target's Attack including their active Attack stage
     const foulPlayAtk = Math.floor(ts.atk * stageMult(ts.atkStage));
@@ -832,14 +855,11 @@ function tryOHKO(
   } else {
     evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult, evStep, maxAttackerEV);
 
-    // Only fall back to a type-boosting item if no choice item is active — can't hold two items.
-    // Mega/Primal Pokémon hold their transformation item and cannot hold type-boost items.
+    // Only fall back to a held item if no choice item is active — can't hold two items.
+    // Mega/Primal Pokémon hold their transformation item and cannot hold a fallback item.
     if (evNeeded === null && choiceItemMult === 1.0 && allowTypeItem) {
-      const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
-      if (typeItem) {
-        evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult, evStep, maxAttackerEV);
-        if (evNeeded !== null) item = typeItem;
-      }
+      const fallback = tryFallbackItem(activePower);
+      if (fallback) { evNeeded = fallback.ev; item = fallback.item; }
     }
 
     // Round: if base power fails, retry at double power (another Pokémon used Round first).
@@ -848,11 +868,8 @@ function tryOHKO(
       activePower = effectivePower * 2;
       evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, 1.0, atkTotalMult, evStep, maxAttackerEV);
       if (evNeeded === null && choiceItemMult === 1.0 && allowTypeItem) {
-        const typeItem = TYPE_BOOST_ITEMS[effectiveTypeId];
-        if (typeItem) {
-          evNeeded = minEVsToOHKO(activePower, atkBase, defStat, scaledTargetHP, stabFactor, effFactor, !showPossible, typeItem.boost, atkTotalMult, evStep, maxAttackerEV);
-          if (evNeeded !== null) item = typeItem;
-        }
+        const fallback = tryFallbackItem(activePower);
+        if (fallback) { evNeeded = fallback.ev; item = fallback.item; }
       }
       if (evNeeded !== null) needsRoundBoost = true;
     }

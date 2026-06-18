@@ -5,6 +5,32 @@ const releases: {
   sections: { heading: string; items: string[] }[];
 }[] = [
   {
+    version: '1.22.0',
+    date: 'June 2026',
+    title: 'Pokémon Champions Regulation M-B',
+    sections: [
+      {
+        heading: '🏆 Champions Roster',
+        items: [
+          'The Champions roster now follows Regulation M-B (June 17 – September 2, 2026). 36 newly-useable Pokémon were added, including Metagross, Gholdengo, Annihilape, Grimmsnarl, Overqwil and Houndstone, the ORAS Mega Evolutions (Sceptile, Blaziken, Swampert, Mawile, Metagross), and the new Champions-exclusive Megas (Staraptor, Scolipede, Scrafty, Eelektross, Pyroar, Malamar, Barbaracle, Dragalge, Falinks).',
+          'A "Regulation M-B · source" link now sits under the Pokémon Champions toggle, citing the Serebii regulation page so the roster\'s source is verifiable.',
+        ],
+      },
+      {
+        heading: '✨ New',
+        items: [
+          'Life Orb (×1.3) is now modelled as a held-item option. When raw EV investment and the type-boost plate (×1.2) both fall short of an OHKO, the calculator falls back to Life Orb, surfacing knockouts that were previously unreachable. The type plate is still preferred whenever it suffices.',
+        ],
+      },
+      {
+        heading: '🧪 Testing',
+        items: [
+          'Added coverage confirming Life Orb is selected only when the type plate cannot secure the OHKO, and that the plate remains preferred when it works.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.21.0',
     date: 'May 2026',
     title: 'Usage-Based Default Sort',

@@ -711,6 +711,7 @@ export default function App() {
                   </Tooltip>
 
                   {/* Champions toggle */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '3px' }}>
                   <Tooltip
                     content={
                       <div>
@@ -723,6 +724,9 @@ export default function App() {
                         </div>
                         <div>
                           <span style={{ color: '#68d391', fontWeight: 700 }}>Off</span> — all Pokémon from the full Pokédex are considered.
+                        </div>
+                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #444', color: '#bbb', fontSize: '11px' }}>
+                          Roster follows <strong>Regulation M-B</strong> (Jun 17 – Sep 2, 2026). Source linked below.
                         </div>
                       </div>
                     }
@@ -758,6 +762,19 @@ export default function App() {
                       </span>
                     </button>
                   </Tooltip>
+                    <a
+                      href="https://www.serebii.net/pokemonchampions/rankedbattle/regulationm-b.shtml"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Roster reflects Regulation M-B (Jun 17 – Sep 2, 2026). View source on Serebii."
+                      style={{
+                        fontSize: '10px', fontWeight: 600, color: '#9f7aea',
+                        textDecoration: 'none', paddingLeft: '2px', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Regulation M-B · source ↗
+                    </a>
+                  </div>
 
                   {/* Stat mode toggle: EVs ↔ SPs */}
                   <Tooltip

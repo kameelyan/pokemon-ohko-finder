@@ -717,9 +717,11 @@ describe('findPokemonOHKOs — Parental Bond bypasses Sturdy', () => {
 //   With Protean (STAB 1.5×):
 //     252 EVs → max 166, min 141  — both ≥ 125  → GUARANTEED OHKO ✓
 //   Without Protean (no STAB 1.0×):
-//     252 EVs → max 111            — 111 < 125  → CANNOT OHKO at any EV ✓
+//     252 EVs → max 111            — 111 < 125  → no item-free OHKO; only the
+//                                    Life Orb ×1.3 fallback can force it ✓
 //
-// The gap is unambiguous: Protean is the sole differentiator.
+// The gap is unambiguous: with STAB the OHKO is item-free, without it the only
+// path is a held item — Protean is the sole differentiator for an item-free KO.
 
 describe('findPokemonOHKOs — Protean / Libero always grant STAB', () => {
   const WATER_TYPE  = 11;
@@ -730,12 +732,15 @@ describe('findPokemonOHKOs — Protean / Libero always grant STAB', () => {
   // Protean unlocks a guaranteed OHKO that is impossible without it.
   const softTarget = makeTarget(makePokemon(TARGET_ID, 50, 30, 50, [NORMAL_TYPE]));
 
-  it('without Protean: cannot OHKO even at 252 EVs (max damage 111 < 125 HP)', () => {
+  it('without Protean: no item-free OHKO — only the Life Orb (×1.3) fallback can force it', () => {
     const noAbility = makePokemon(ATTACKER_ID, 103, 80, 100, [NORMAL_TYPE]);
     const data = makeData(noAbility, NORMAL_TYPE, [waterMove]);
     const results = findPokemonOHKOs([softTarget], data);
-    // No STAB → move can never OHKO the target regardless of EV investment
-    expect(results.length).toBe(0);
+    // No STAB → raw EV investment (max 111 < 125 HP) and the 1.2× type plate both fall short.
+    // The only path to the OHKO is the Life Orb ×1.3 fallback, so every OHKO found must carry it.
+    const allMoves = results.flatMap(r => r.movesPerTarget.flat());
+    expect(allMoves.length).toBeGreaterThan(0);
+    expect(allMoves.every(m => m.item?.identifier === 'life-orb')).toBe(true);
   });
 
   it('Protean grants STAB and enables the OHKO (guaranteed at 252 EVs)', () => {
@@ -1067,5 +1072,65 @@ describe('findPokemonOHKOs — nature variant for spread move (Earthquake scenar
     expect(neutralEQ).toBeDefined();
     expect(neutralEQ!.item?.identifier).toBe('soft-sand');
     expect(neutralEQ!.isGuaranteed).toBe(true);
+  });
+});
+
+describe('findPokemonOHKOs — Black Belt with special Fighting move (Aura Sphere)', () => {
+  // Verify TYPE_BOOST_ITEMS correctly applies to special Fighting moves.
+  // Aura Sphere is Fighting-type, special (damageClassId=3) — Black Belt must show
+  // when the attacker can't OHKO without an item but can with Black Belt.
+  //
+  // Stats use the CALCULATED values (calcStat), not raw base stats:
+  //   Attacker SpA base=120: calcStat(120,252)=172, calcStat(120,228)=169
+  //   Target SpD base=60:   calcStat(60,0)=80   (this is the defStat used in damage)
+  //   Target HP base=40:    calcHP(40,0)=115     (targetHP)
+  //
+  // No item at 252 EVs: atk=172, base=75, stab=115, min=floor(115*0.85)=97   < 115 ✗
+  // Black Belt at 228 EVs: atk=169, base=76, stab=114, item=136, min=floor(136*0.85)=115 ≥ 115 ✓
+  const FIGHTING = 2;
+  const auraAttacker = makePokemon(9997, 120, 60, 80, [FIGHTING], [], 'aura-attacker');
+  const auraTarget   = makePokemon(9998, 60, 60, 40, [FIGHTING], [], 'aura-target');
+
+  const auraSphere: Move = {
+    id: 396,
+    identifier: 'aura-sphere',
+    name: 'Aura Sphere',
+    typeId: FIGHTING,
+    power: 80,
+    damageClassId: 3,  // Special
+    accuracy: null,
+    description: '',
+    priority: 0,
+    flags: [],
+    effectId: 18,
+    effectChance: null,
+    isSpread: false,
+    multiHit: null,
+  };
+
+  const auraData: GameData = {
+    pokemon:      new Map([[auraAttacker.id, auraAttacker]]),
+    moves:        new Map([[auraSphere.id, auraSphere]]),
+    pokemonMoves: new Map([[auraAttacker.id, new Set([auraSphere.id])]]),
+    typeEfficacy: new Map([[`${FIGHTING}-${FIGHTING}`, 100]]),
+    typeNames:    new Map([[FIGHTING, 'Fighting']]),
+    championsRoster: new Set(),
+    usageRank: new Map(),
+  };
+
+  const auraTargetCfg: TargetConfig = {
+    pokemon: auraTarget,
+    evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+  };
+
+  it('Black Belt appears for Aura Sphere when attacker needs it for a guaranteed OHKO', () => {
+    const results = findPokemonOHKOs([auraTargetCfg], auraData, false, 0, 'none', false /* singles */);
+    const allMoves = results.flatMap(r => r.movesPerTarget.flat());
+    const row = allMoves.find(m => m.move.id === 396 && !m.nature);
+    expect(row).toBeDefined();
+    expect(row!.item?.identifier).toBe('black-belt');
+    expect(row!.isGuaranteed).toBe(true);
+    expect(row!.evNeeded).toBeLessThanOrEqual(228);
+    expect(row!.evNeeded).toBeGreaterThanOrEqual(0);
   });
 });
